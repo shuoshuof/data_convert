@@ -16,9 +16,9 @@ class GVHMRPipeline(BaseRetargetPipeline):
         super().__init__(motion_dir,save_dir,num_processes)
         self.smpl_model_path = smpl_model_path
     def _read_data(self,**kwargs)->Optional[list]:
-        video_motion_paths = [os.path.join(self.motion_dir, f) for f in os.listdir(self.motion_dir) if
+        motion_paths = [os.path.join(self.motion_dir, f) for f in os.listdir(self.motion_dir) if
                               os.path.isfile(os.path.join(self.motion_dir, f))]
-        return video_motion_paths
+        return motion_paths
 
     def _split_data(self,data,**kwargs)->Optional[list]:
         return np.array_split(data,self.num_processes)
@@ -76,6 +76,6 @@ class GVHMRPipeline(BaseRetargetPipeline):
 
 if __name__ == '__main__':
     gvhmr_pipeline = GVHMRPipeline(motion_dir='test_data/pt_data1',
-                                   save_dir='test_data/out_data2',
+                                   save_dir='test_data/retargeted_data',
                                    smpl_model_path='asset/smpl')
-    gvhmr_pipeline.run(debug=False,max_epoch=2000)
+    gvhmr_pipeline.run(debug=True,max_epoch=5000)
