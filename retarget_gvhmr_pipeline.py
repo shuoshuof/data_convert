@@ -1,13 +1,14 @@
-
 from smplx import SMPL
 import torch
 from tqdm import tqdm
-from motion_convert.pipeline.base_pipeline import BaseRetargetPipeline
-from motion_convert.retarget_optimizer.smpl_retarget_optimizer import BaseSMPLRetargetOptimizer
 from typing import Optional
 import numpy as np
 import os
 import multiprocessing
+
+from motion_convert.pipeline.base_pipeline import BaseRetargetPipeline
+from motion_convert.retarget_optimizer.smpl_retarget_optimizer import BaseSMPLRetargetOptimizer
+from motion_convert.format_convert.smpl2isaac import convert2isaac
 
 class GVHMRPipeline(BaseRetargetPipeline):
     def __init__(self,motion_dir:str,save_dir:str,smpl_model_path,num_processes:int=None):
@@ -42,7 +43,7 @@ class GVHMRPipeline(BaseRetargetPipeline):
 
         rebuilt_motion = output.joints[:, :24, :]
         return rebuilt_motion
-    def coord_trans(self,rebuilt_motion)->torch.Tensor:
+    def _coord_trans(self,rebuilt_motion)->torch.Tensor:
         new_motion = torch.zeros_like(rebuilt_motion)
         new_motion[..., 0] = -rebuilt_motion[..., 2]
         new_motion[..., 1] = -rebuilt_motion[..., 0]
@@ -53,6 +54,7 @@ class GVHMRPipeline(BaseRetargetPipeline):
         for path in data_chunk:
             motion_data = torch.load(path)
             rebuilt_motion_data = self._rebuild_motion(motion_data)
+            rebuilt_motion_data = self._coord_trans(rebuilt_motion_data)
 
             max_epoch = kwargs.get('max_epoch',2000)
             lr = kwargs.get('lr',1e-1)
@@ -66,6 +68,7 @@ class GVHMRPipeline(BaseRetargetPipeline):
             file_name = os.path.basename(path).split('.')[0]
             data_dict[file_name] = data
 
+            data_dict = convert2isaac(data_dict)
 
 
 
@@ -73,5 +76,4 @@ if __name__ == '__main__':
     gvhmr_pipeline = GVHMRPipeline(motion_dir='test_data/pt_data1',
                                    save_dir='test_data/pt_data1',
                                    smpl_model_path='asset/smpl')
-
     gvhmr_pipeline.run()
