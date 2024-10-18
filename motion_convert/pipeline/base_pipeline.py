@@ -6,23 +6,23 @@ import multiprocessing
 import numpy as np
 
 class BaseRetargetPipeline(ABC):
-    def __init__(self,num_processes:int,motion_dir:str,save_dir:str):
+    def __init__(self,motion_dir:str,save_dir:str,num_processes:int):
         self.num_processes = multiprocessing.cpu_count() if num_processes is None else num_processes
         self.motion_dir = motion_dir
         self.save_dir = save_dir
     @abstractmethod
-    def _read_data(self)->Optional[list]:
+    def _read_data(self,**kwargs)->Optional[list]:
         pass
     @abstractmethod
-    def _split_data(self)->Optional[list,np.ndarray]:
+    def _split_data(self,data,**kwargs)->Optional[list,np.ndarray]:
         pass
     @abstractmethod
     def _process_data(self,data_chunk,results,process_idx,**kwargs):
         pass
     def run(self,**kwargs):
-        data = self._read_data()
+        data = self._read_data(**kwargs)
 
-        data_chunks = self._split_data()
+        data_chunks = self._split_data(data,**kwargs)
 
         manager = multiprocessing.Manager()
         results = manager.list([None]*self.num_processes)

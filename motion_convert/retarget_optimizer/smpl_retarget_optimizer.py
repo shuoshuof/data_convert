@@ -1,9 +1,9 @@
-from motion_retarget.retarget_optimizer import BaseRetargetOptimizer
+from motion_convert.retarget_optimizer.base_retarget_optimizer import BaseRetargetOptimizer
 import torch
 import numpy as np
 from smplx import SMPL
 
-class SMPLRetargetOptimizer(BaseRetargetOptimizer):
+class BaseSMPLRetargetOptimizer(BaseRetargetOptimizer):
     def __init__(self,smpl_model_path, gender="NEUTRAL"):
         super().__init__()
         self.forward_model = SMPL(smpl_model_path, gender=gender).cuda()
