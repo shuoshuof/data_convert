@@ -89,6 +89,6 @@ class ConvertGVHMRPipeline(BaseRetargetPipeline):
 
 
 if __name__ == '__main__':
-    pipeline = ConvertGVHMRPipeline(motion_dir='test_data/pt_data1',
+    pipeline = ConvertGVHMRPipeline(motion_dir='test_data/test_data',
                                     save_dir='test_data/converted_data')
-    pipeline.run(debug=True)
+    pipeline.run(debug=False)
