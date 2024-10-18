@@ -29,12 +29,12 @@ class BaseSMPLRetargetOptimizer(BaseRetargetOptimizer):
         return {'body_pose':body_pose, 'global_orient':global_orient, 'transl':transl}
 
     def _loss_function(self, motion_data, forward_model_output) -> torch.Tensor:
-        motion_body_positions = torch.tensor(motion_data[:, :24, :], dtype=torch.float32).cuda()
+        motion_body_positions = motion_data[:, :24, :].clone().detach().cuda()
         smpl_body_positions = forward_model_output.joints[:, :24, :]
         loss = torch.mean((smpl_body_positions - motion_body_positions) ** 2)
         return loss
     def _set_lr_scheduler(self):
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', patience=50, verbose=True, factor=0.5)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', patience=50, factor=0.5)
         return scheduler
     def _set_optimizer(self, lr: float, **kwargs):
         return torch.optim.Adam(self.params.values(), lr=lr, **kwargs)

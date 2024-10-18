@@ -1,3 +1,5 @@
+import os
+
 from tqdm import tqdm
 import torch
 from abc import ABC, abstractmethod
@@ -6,7 +8,7 @@ import multiprocessing
 import numpy as np
 
 class BaseRetargetPipeline(ABC):
-    def __init__(self,motion_dir:str,save_dir:str,num_processes:int):
+    def __init__(self,motion_dir:str,save_dir:str,num_processes:int=None):
         self.num_processes = multiprocessing.cpu_count() if num_processes is None else num_processes
         self.motion_dir = motion_dir
         self.save_dir = save_dir
@@ -14,7 +16,7 @@ class BaseRetargetPipeline(ABC):
     def _read_data(self,**kwargs)->Optional[list]:
         pass
     @abstractmethod
-    def _split_data(self,data,**kwargs)->Optional[list,np.ndarray]:
+    def _split_data(self,data,**kwargs)->Optional[list]:
         pass
     @abstractmethod
     def _process_data(self,data_chunk,results,process_idx,**kwargs):
@@ -26,6 +28,8 @@ class BaseRetargetPipeline(ABC):
 
         manager = multiprocessing.Manager()
         results = manager.list([None]*self.num_processes)
+
+        os.makedirs(self.save_dir,exist_ok=True)
 
         processes = []
         for process_idx in range(self.num_processes):
