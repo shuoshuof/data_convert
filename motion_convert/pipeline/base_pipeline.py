@@ -21,7 +21,7 @@ class BaseRetargetPipeline(ABC):
     @abstractmethod
     def _process_data(self,data_chunk,results,process_idx,**kwargs):
         pass
-    def run(self,**kwargs):
+    def run(self,debug=False,**kwargs):
         data = self._read_data(**kwargs)
 
         data_chunks = self._split_data(data,**kwargs)
@@ -31,17 +31,21 @@ class BaseRetargetPipeline(ABC):
 
         os.makedirs(self.save_dir,exist_ok=True)
 
-        processes = []
-        for process_idx in range(self.num_processes):
-            p = multiprocessing.Process(target=self._process_data,
-                                        args=(data_chunks[process_idx], results, process_idx),
-                                        kwargs=kwargs)
-            processes.append(p)
-            p.start()
+        if debug:
+            self._process_data(data_chunks[0], results, 0,**kwargs)
+        else:
+            processes = []
+            for process_idx in range(self.num_processes):
+                p = multiprocessing.Process(target=self._process_data,
+                                            args=(data_chunks[process_idx], results, process_idx),
+                                            kwargs=kwargs)
+                processes.append(p)
+                p.start()
 
-        for p in processes:
-            p.join()
+            for p in processes:
+                p.join()
 
+        print("all processes done")
 
 
 

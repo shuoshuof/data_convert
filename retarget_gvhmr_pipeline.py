@@ -5,6 +5,7 @@ from typing import Optional
 import numpy as np
 import os
 import multiprocessing
+import joblib
 
 from motion_convert.pipeline.base_pipeline import BaseRetargetPipeline
 from motion_convert.retarget_optimizer.smpl_retarget_optimizer import BaseSMPLRetargetOptimizer
@@ -64,16 +65,17 @@ class GVHMRPipeline(BaseRetargetPipeline):
                 lr=lr,
                 process_idx=process_idx
             )
+            data = convert2isaac(data)
             data_dict = {}
             file_name = os.path.basename(path).split('.')[0]
             data_dict[file_name] = data
 
-            data_dict = convert2isaac(data_dict)
-
+            with open(f'{self.save_dir}/{file_name}.pkl', 'wb') as f:
+                joblib.dump(data_dict,f)
 
 
 if __name__ == '__main__':
     gvhmr_pipeline = GVHMRPipeline(motion_dir='test_data/pt_data1',
-                                   save_dir='test_data/pt_data1',
+                                   save_dir='test_data/out_data2',
                                    smpl_model_path='asset/smpl')
-    gvhmr_pipeline.run()
+    gvhmr_pipeline.run(debug=False,max_epoch=2000)

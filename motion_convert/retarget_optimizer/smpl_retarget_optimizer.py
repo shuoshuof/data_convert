@@ -11,10 +11,18 @@ class BaseSMPLRetargetOptimizer(BaseRetargetOptimizer):
     def train(self, motion_data, max_epoch: int, lr: float, **kwargs):
         super().train(motion_data, max_epoch, lr, **kwargs)
 
+        # optimized_data = {
+        #     'pose_aa': torch.concatenate([self.params['global_orient'],self.params['body_pose']],dim=1).detach().cpu().numpy(),
+        #     'beta': np.zeros(10),
+        #     'transl': self.params['transl'].detach().cpu().numpy(),
+        #     'gender': 'neutral',
+        #     'fps': 20
+        # }
+
         optimized_data = {
-            'pose_aa': torch.concatenate([self.params['global_orient'],self.params['body_pose']],dim=1).detach().cpu().numpy(),
-            'beta': np.zeros(10),
-            'trans': self.params['transl'].detach().cpu().numpy(),
+            'pose_aa': torch.concatenate([self.params['global_orient'],self.params['body_pose']],dim=1).detach().cpu(),
+            'beta': torch.zeros(10),
+            'transl': self.params['transl'].detach().cpu(),
             'gender': 'neutral',
             'fps': 20
         }
