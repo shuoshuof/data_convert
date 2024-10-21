@@ -16,7 +16,7 @@ class BasePipeline(ABC):
     def _read_data(self,**kwargs)->Optional[list]:
         pass
     @abstractmethod
-    def _split_data(self,data,**kwargs)->Optional[list]:
+    def _split_data(self,data,**kwargs)->Union[list,np.ndarray]:
         pass
     @abstractmethod
     def _process_data(self,data_chunk,results,process_idx,**kwargs):

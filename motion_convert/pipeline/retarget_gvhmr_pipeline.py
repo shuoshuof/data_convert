@@ -1,7 +1,7 @@
 from smplx import SMPL
 import torch
 from tqdm import tqdm
-from typing import Optional
+from typing import Optional,Union
 import numpy as np
 import os
 import multiprocessing
@@ -15,12 +15,12 @@ class GVHMRPipeline(BasePipeline):
     def __init__(self,motion_dir:str,save_dir:str,smpl_model_path,num_processes:int=None):
         super().__init__(motion_dir,save_dir,num_processes)
         self.smpl_model_path = smpl_model_path
-    def _read_data(self,**kwargs)->Optional[list]:
+    def _read_data(self,**kwargs)->list:
         motion_paths = [os.path.join(self.motion_dir, f) for f in os.listdir(self.motion_dir) if
                               os.path.isfile(os.path.join(self.motion_dir, f))]
         return motion_paths
 
-    def _split_data(self,data,**kwargs)->Optional[list]:
+    def _split_data(self,data,**kwargs)->Union[np.ndarray, list]:
         return np.array_split(data,self.num_processes)
 
     def _rebuild_motion(self,motion_data)->torch.Tensor:

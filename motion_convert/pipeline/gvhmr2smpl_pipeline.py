@@ -21,7 +21,7 @@ class ConvertGVHMRPipeline(BasePipeline):
                               os.path.isfile(os.path.join(self.motion_dir, f))]
         return motion_paths
 
-    def _split_data(self,data,**kwargs)->Optional[list]:
+    def _split_data(self,data,**kwargs):
         return np.array_split(data,self.num_processes)
 
     def coord_transform(self,global_orient, transl):
