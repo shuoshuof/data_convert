@@ -10,8 +10,7 @@ class BaseRetargetOptimizer(ABC):
         self.lr_scheduler = None
         self.params = None
 
-    def train(self, motion_data, max_epoch: int, lr: float,process_idx, **kwargs):
-
+    def train(self, motion_data:torch.Tensor, max_epoch: int, lr: float,process_idx, **kwargs):
         motion_data_shape = motion_data.shape
 
         self.params = self._init_params(motion_data_shape,**kwargs)
@@ -42,9 +41,6 @@ class BaseRetargetOptimizer(ABC):
             else:
                 self.lr_scheduler.step()
 
-    # @abstractmethod
-    # def _set_forward_model(self) -> torch.nn.Module:
-    #     pass
 
     @abstractmethod
     def _loss_function(self, motion_data, forward_model_output) -> torch.Tensor:

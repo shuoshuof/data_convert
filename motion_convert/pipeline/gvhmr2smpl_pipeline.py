@@ -9,10 +9,10 @@ import numpy as np
 from scipy.spatial.transform import Rotation as sRot
 from poselib.poselib.core.rotation3d import quat_mul,quat_rotate
 
-from motion_convert.pipeline.base_pipeline import BaseRetargetPipeline
+from motion_convert.pipeline.base_pipeline import BasePipeline
 from motion_convert.format_convert.smpl2isaac import convert2isaac
 
-class ConvertGVHMRPipeline(BaseRetargetPipeline):
+class ConvertGVHMRPipeline(BasePipeline):
     def __init__(self,motion_dir:str,save_dir:str,num_processes:int=None):
         super().__init__(motion_dir,save_dir,num_processes)
 
@@ -23,15 +23,6 @@ class ConvertGVHMRPipeline(BaseRetargetPipeline):
 
     def _split_data(self,data,**kwargs)->Optional[list]:
         return np.array_split(data,self.num_processes)
-
-    def load_data(self,path):
-        motion_data = torch.load(path)
-        body_pose = motion_data['smpl_params_global']['body_pose']
-        betas = motion_data['smpl_params_global']['betas']
-        global_orient = motion_data['smpl_params_global']['global_orient']
-        transl = motion_data['smpl_params_global']['transl']
-
-
 
     def coord_transform(self,global_orient, transl):
         global_orient = sRot.from_rotvec(global_orient.reshape(-1, 3)).as_quat()

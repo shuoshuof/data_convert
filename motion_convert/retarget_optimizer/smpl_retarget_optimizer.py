@@ -46,3 +46,5 @@ class BaseSMPLRetargetOptimizer(BaseRetargetOptimizer):
         return scheduler
     def _set_optimizer(self, lr: float, **kwargs):
         return torch.optim.Adam(self.params.values(), lr=lr, **kwargs)
+    
+

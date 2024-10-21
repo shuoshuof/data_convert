@@ -7,11 +7,11 @@ import os
 import multiprocessing
 import joblib
 
-from motion_convert.pipeline.base_pipeline import BaseRetargetPipeline
+from motion_convert.pipeline.base_pipeline import BasePipeline
 from motion_convert.retarget_optimizer.smpl_retarget_optimizer import BaseSMPLRetargetOptimizer
 from motion_convert.format_convert.smpl2isaac import convert2isaac
 
-class GVHMRPipeline(BaseRetargetPipeline):
+class GVHMRPipeline(BasePipeline):
     def __init__(self,motion_dir:str,save_dir:str,smpl_model_path,num_processes:int=None):
         super().__init__(motion_dir,save_dir,num_processes)
         self.smpl_model_path = smpl_model_path

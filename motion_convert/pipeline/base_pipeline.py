@@ -7,7 +7,7 @@ from typing import Optional, Union
 import multiprocessing
 import numpy as np
 
-class BaseRetargetPipeline(ABC):
+class BasePipeline(ABC):
     def __init__(self,motion_dir:str,save_dir:str,num_processes:int=None):
         self.num_processes = multiprocessing.cpu_count() if num_processes is None else num_processes
         self.motion_dir = motion_dir
