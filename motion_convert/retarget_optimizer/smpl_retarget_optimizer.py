@@ -31,9 +31,9 @@ class BaseSMPLRetargetOptimizer(BaseRetargetOptimizer):
 
         num_frames,_,_ = motion_data_shape
 
-        body_pose = torch.rand((num_frames,23*3),dtype=torch.float32, requires_grad=True, device="cuda")
-        global_orient = torch.rand((num_frames,3),dtype=torch.float32, requires_grad=True, device="cuda")
-        transl = torch.rand((num_frames,3),dtype=torch.float32, requires_grad=True, device="cuda")
+        body_pose = torch.rand((num_frames,23*3),dtype=torch.float32, requires_grad=True, device=self.device)
+        global_orient = torch.rand((num_frames,3),dtype=torch.float32, requires_grad=True, device=self.device)
+        transl = torch.rand((num_frames,3),dtype=torch.float32, requires_grad=True, device=self.device)
         return {'body_pose':body_pose, 'global_orient':global_orient, 'transl':transl}
 
     def _loss_function(self, motion_data, forward_model_output) -> torch.Tensor:

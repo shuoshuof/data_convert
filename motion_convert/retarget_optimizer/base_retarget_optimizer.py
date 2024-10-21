@@ -4,12 +4,12 @@ from abc import ABC, abstractmethod
 from typing import Optional, Union
 
 class BaseRetargetOptimizer(ABC):
-    def __init__(self):
+    def __init__(self,device='cuda:0'):
         self.forward_model = None
         self.optimizer = None
         self.lr_scheduler = None
         self.params = None
-
+        self.device = device
     def train(self, motion_data:Union[torch.Tensor], max_epoch: int, lr: float,process_idx, **kwargs):
         motion_data_shape = motion_data.shape
 
