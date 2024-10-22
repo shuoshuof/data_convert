@@ -6,9 +6,10 @@ from smplx import SMPL
 class BaseSMPLRetargetOptimizer(BaseRetargetOptimizer):
     def __init__(self,smpl_model_path, gender="NEUTRAL"):
         super().__init__()
-        self.forward_model = SMPL(smpl_model_path, gender=gender).cuda()
+        self.robot_model = SMPL(smpl_model_path, gender=gender).cuda()
 
     def train(self, motion_data, max_epoch: int, lr: float, **kwargs):
+        self.motion_data = motion_data.shape
         super().train(motion_data, max_epoch, lr, **kwargs)
 
         # optimized_data = {
@@ -27,16 +28,16 @@ class BaseSMPLRetargetOptimizer(BaseRetargetOptimizer):
             'fps': 20
         }
         return optimized_data
-    def _init_params(self,motion_data_shape, **kwargs):
+    def _init_params(self,**kwargs):
 
-        num_frames,_,_ = motion_data_shape
+        motion_length,_,_ = self.motion_data
 
-        body_pose = torch.rand((num_frames,23*3),dtype=torch.float32, requires_grad=True, device=self.device)
-        global_orient = torch.rand((num_frames,3),dtype=torch.float32, requires_grad=True, device=self.device)
-        transl = torch.rand((num_frames,3),dtype=torch.float32, requires_grad=True, device=self.device)
+        body_pose = torch.rand((motion_length,23*3),dtype=torch.float32, requires_grad=True, device=self.device)
+        global_orient = torch.rand((motion_length,3),dtype=torch.float32, requires_grad=True, device=self.device)
+        transl = torch.rand((motion_length,3),dtype=torch.float32, requires_grad=True, device=self.device)
         return {'body_pose':body_pose, 'global_orient':global_orient, 'transl':transl}
 
-    def _loss_function(self, motion_data, forward_model_output) -> torch.Tensor:
+    def _cal_loss(self, forward_model_output,motion_data) -> torch.Tensor:
         motion_body_positions = motion_data[:, :24, :].clone().detach().cuda()
         smpl_body_positions = forward_model_output.joints[:, :24, :]
         loss = torch.mean((smpl_body_positions - motion_body_positions) ** 2)

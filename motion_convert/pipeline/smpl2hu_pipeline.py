@@ -67,7 +67,7 @@ class SMPL2HuPipeline(BasePipeline):
         new_motion_global_rotation = motion.global_rotation
         new_motion_root_translation = motion.root_translation
 
-        t_pose_local_translation = self.smpl_t_pose.sk_local_translation.repeat(motion_length, 1, 1)
+        t_pose_local_translation = self.smpl_t_pose.local_translation.repeat(motion_length, 1, 1)
         parent_indices = self.smpl_t_pose.skeleton_tree.parent_indices
 
         rebuild_indices = [16,17,18,21,22,23]
@@ -138,6 +138,6 @@ class SMPL2HuPipeline(BasePipeline):
 
 if __name__ == '__main__':
 
-    smpl2hu_pipeline = SMPL2HuPipeline(motion_dir='test_data/converted_data',
+    smpl2hu_pipeline = SMPL2HuPipeline(motion_dir='test_data/forward_test1',
                                       save_dir='test_data/hu_data')
-    smpl2hu_pipeline.run(debug=True)
+    smpl2hu_pipeline.run(debug=True,max_epoch=200)
