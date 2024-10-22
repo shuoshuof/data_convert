@@ -65,6 +65,7 @@ class GVHMRPipeline(BasePipeline):
                 lr=lr,
                 process_idx=process_idx
             )
+
             data = convert2isaac(data)
             data_dict = {}
             file_name = os.path.basename(path).split('.')[0]

@@ -80,6 +80,6 @@ class ConvertGVHMRPipeline(BasePipeline):
 
 
 if __name__ == '__main__':
-    pipeline = ConvertGVHMRPipeline(motion_dir='test_data/test_data',
-                                    save_dir='test_data/converted_data')
+    pipeline = ConvertGVHMRPipeline(motion_dir='test_data/cam_data',
+                                    save_dir='test_data/cam_data_out',)
     pipeline.run(debug=False)

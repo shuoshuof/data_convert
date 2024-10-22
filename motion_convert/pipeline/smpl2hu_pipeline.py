@@ -18,7 +18,7 @@ from body_visualizer.body_visualizer import BodyVisualizer
 from motion_convert.pipeline.base_pipeline import BasePipeline
 from motion_convert.format_convert.smpl2isaac import convert2isaac
 from motion_convert.utils.rotation import *
-
+from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
 JOINT_MAPPING_v1 = {
     'Pelvis': 'pelvis_link',
     'L_Hip': 'left_hip_pitch_link',
@@ -43,12 +43,12 @@ class SMPL2HuPipeline(BasePipeline):
     def __init__(self, motion_dir: str, save_dir: str, num_processes: int = None):
         super().__init__(motion_dir, save_dir, num_processes)
         self.smpl_t_pose,self.hu_t_pose,self.smpl_skeleton_tree,self.hu_skeleton_tree = self._load_asset()
-        
-    def _read_data(self, **kwargs) -> Optional[list]:
+
+    def _read_data(self, **kwargs) -> list:
         motion_paths = [os.path.join(self.motion_dir, f) for f in os.listdir(self.motion_dir) if
                               os.path.isfile(os.path.join(self.motion_dir, f))]
         return motion_paths
-    def _split_data(self,data,**kwargs)->Optional[list]:
+    def _split_data(self,data,**kwargs)->list:
         return np.array_split(data,self.num_processes)
     def _load_asset(self)->[SkeletonState, SkeletonState,SkeletonTree, SkeletonTree]:
         with open('asset/t_pose/smpl_t_pose.pkl','rb') as f:
@@ -59,7 +59,7 @@ class SMPL2HuPipeline(BasePipeline):
             smpl_skeleton_tree = pickle.load(f)
         hu_skeleton_tree = hu_t_pose.skeleton_tree
         return smpl_t_pose,hu_t_pose,smpl_skeleton_tree,hu_skeleton_tree
-    def _rebuild_with_smpl_t_pose(self,motion:SkeletonMotion):
+    def _rebuild_with_smpl_t_pose(self,motion:SkeletonMotion)->SkeletonMotion:
         motion_fps = motion.fps
 
         motion_global_translation = motion.global_translation
@@ -67,7 +67,7 @@ class SMPL2HuPipeline(BasePipeline):
         new_motion_global_rotation = motion.global_rotation
         new_motion_root_translation = motion.root_translation
 
-        t_pose_local_translation = self.smpl_t_pose.local_translation.repeat(motion_length,1,1)
+        t_pose_local_translation = self.smpl_t_pose.sk_local_translation.repeat(motion_length, 1, 1)
         parent_indices = self.smpl_t_pose.skeleton_tree.parent_indices
 
         rebuild_indices = [16,17,18,21,22,23]
@@ -91,6 +91,7 @@ class SMPL2HuPipeline(BasePipeline):
 
 
     def _process_data(self,data_chunk,results,process_idx,**kwargs):
+        hu_retarget_optimizer = HuRetargetOptimizer(self.hu_skeleton_tree)
         for path in data_chunk:
             with open(path,'rb') as f:
                 motion_data = joblib.load(f)
@@ -122,10 +123,16 @@ class SMPL2HuPipeline(BasePipeline):
                 scale_to_target_skeleton=1.,
             )
 
+            max_epoch = kwargs.get('max_epoch',500)
+            lr = kwargs.get('lr',1e-1)
+            retargeted_motion = hu_retarget_optimizer.train(
+                motion_data=target_motion,
+                max_epoch=max_epoch,
+                lr=lr,
+                process_idx=process_idx
+            )
 
-
-            plot_skeleton_H([smpl_motion,rebuilt_motion,target_motion])
-
+            plot_skeleton_H([smpl_motion,rebuilt_motion,target_motion,retargeted_motion])
 
 
 

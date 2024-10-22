@@ -56,7 +56,7 @@ def convert2isaac(data):
 
     with open('asset/smpl/smpl_skeleton_tree.pkl', 'rb') as f:
         skeleton_tree = pickle.load(f)
-    root_trans_offset = transl + skeleton_tree.local_translation[0]
+    root_trans_offset = transl + skeleton_tree.sk_local_translation[0]
 
     new_sk_state = SkeletonState.from_rotation_and_root_translation(
         skeleton_tree,
@@ -87,10 +87,10 @@ def convert2isaac(data):
     root_trans_offset = rotated_sk_state.root_translation
 
 
-    bd_visualizer = BodyVisualizer("smpl24",static_frame=False)
-    motion_global_translation = rotated_sk_state.global_translation[:,isaac_2_smpl,:]
-    for global_translation in motion_global_translation:
-        bd_visualizer.step(global_translation)
+    # bd_visualizer = BodyVisualizer("smpl24",static_frame=False)
+    # motion_global_translation = rotated_sk_state.global_translation[:,isaac_2_smpl,:]
+    # for global_translation in motion_global_translation:
+    #     bd_visualizer.step(global_translation)
 
     new_motion_out = {}
     new_motion_out['pose_quat_global'] = pose_quat_global
