@@ -19,6 +19,7 @@ from motion_convert.pipeline.base_pipeline import BasePipeline
 from motion_convert.format_convert.smpl2isaac import convert2isaac
 from motion_convert.utils.rotation import *
 from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
+from motion_convert.utils.motion_process import fix_root,move_feet_on_the_ground
 JOINT_MAPPING_v1 = {
     'Pelvis': 'pelvis_link',
     'L_Hip': 'left_hip_pitch_link',
@@ -95,8 +96,8 @@ class SMPL2HuPipeline(BasePipeline):
         for path in data_chunk:
             with open(path,'rb') as f:
                 motion_data = joblib.load(f)
-            motion_key = os.path.basename(path).split('.')[0]
-            motion = motion_data[motion_key]
+            file_name = os.path.basename(path).split('.')[0]
+            motion = motion_data[file_name]
             motion_fps = motion['fps']
 
             motion_global_rotation = motion['pose_quat_global']
@@ -131,13 +132,30 @@ class SMPL2HuPipeline(BasePipeline):
                 lr=lr,
                 process_idx=process_idx
             )
+            if kwargs.get('fix_root',False):
+                retargeted_motion = fix_root(retargeted_motion)
+            if kwargs.get('move_to_ground',False):
+                retargeted_motion = move_feet_on_the_ground(retargeted_motion)
 
-            plot_skeleton_H([smpl_motion,rebuilt_motion,target_motion,retargeted_motion])
+            # plot_skeleton_H([target_motion,retargeted_motion])
+            motion_dict = {}
+            motion_dict['pose_quat_global'] = retargeted_motion.global_rotation.numpy()
+            motion_dict['pose_quat'] = retargeted_motion.local_rotation.numpy()
+            motion_dict['trans_orig'] = None
+            motion_dict['root_trans_offset'] = retargeted_motion.root_translation.numpy()
+            motion_dict['target'] = "hu"
+            motion_dict['pose_aa'] = None
+            motion_dict['fps'] = motion_fps
+            motion_dict['project_loss'] = 1e-5
 
-
+            save_dict  = {file_name:motion_dict}
+            with open(f'{self.save_dir}/{file_name}.pkl', 'wb') as f:
+                joblib.dump(save_dict,f)
+            with open(f'{self.save_dir}/{file_name}_motion.pkl', 'wb') as f:
+                joblib.dump(retargeted_motion,f)
 
 if __name__ == '__main__':
 
-    smpl2hu_pipeline = SMPL2HuPipeline(motion_dir='test_data/forward_test1',
+    smpl2hu_pipeline = SMPL2HuPipeline(motion_dir='test_data/forward_test',
                                       save_dir='test_data/hu_data')
-    smpl2hu_pipeline.run(debug=True,max_epoch=200)
+    smpl2hu_pipeline.run(debug=False,max_epoch=200,fix_root=True,move_to_ground=True,)

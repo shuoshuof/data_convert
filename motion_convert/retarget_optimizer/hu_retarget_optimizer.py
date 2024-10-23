@@ -6,7 +6,6 @@ from poselib.poselib.core.rotation3d import *
 
 from motion_convert.retarget_optimizer.base_retarget_optimizer import BaseRetargetOptimizer
 from motion_convert.forward_model.hu_forward_model import HuForwardModel
-from motion_convert.robot_config.Hu import Hu_DOF_IDX_MAPPING as hu_rotation_axis_mapping
 
 class HuRetargetOptimizer(BaseRetargetOptimizer):
     def __init__(self,hu_sk_tree:SkeletonTree):
@@ -16,7 +15,6 @@ class HuRetargetOptimizer(BaseRetargetOptimizer):
         self.loss_fun = HuRetargetLossFun()
     def train(self, motion_data:SkeletonMotion, max_epoch: int, lr: float,process_idx, **kwargs)->SkeletonMotion:
         self.motion_local_rotation = motion_data.local_rotation.to(device=self.device)
-        # self.motion_root_rotation = motion_data.local_rotation[:, 0, :].to(device=self.device)
         self.motion_length, self.joint_num, _ = self.motion_local_rotation.shape
         self.motion_root_translation = motion_data.root_translation.to(device=self.device)
 
@@ -61,8 +59,8 @@ class HuRetargetLossFun(torch.nn.Module):
         self.error_loss = torch.nn.MSELoss(reduction='none')
         self.loss_weight = torch.Tensor([
             0,
-            0, 0, 0, 1, 1,1,
-            0, 0, 0, 1, 1,1,
+            0, 0, 0, 1, 2,1,
+            0, 0, 0, 1, 2,1,
             0,
             2, 2, 1, 1, 1, 1, 2, 1, 1,
             2, 2, 1, 1, 1, 1, 2, 1, 1,
