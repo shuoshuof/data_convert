@@ -19,7 +19,7 @@ class HuForwardModel(BaseForwardModel):
         motion_local_rotation = quat_from_angle_axis(motion_joint_angles.reshape(-1),motion_rotation_axis.reshape(-1,3))
         motion_local_rotation = motion_local_rotation.reshape(motion_length,self.num_joints-1,4)
         # TODO: clip rotation
-        motion_local_rotation = torch.concatenate([motion_root_rotation.unsqueeze(1), motion_local_rotation], dim=1)
+        motion_local_rotation = torch.concatenate([motion_root_rotation, motion_local_rotation], dim=1)
         return super().forward_kinematics(motion_local_rotation=motion_local_rotation,motion_root_translation=motion_root_translation)
     def _clip_rotation(self, rotation):
         pass

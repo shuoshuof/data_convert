@@ -16,28 +16,11 @@ class HuRetargetOptimizer(BaseRetargetOptimizer):
         self.loss_fun = HuRetargetLossFun()
     def train(self, motion_data:SkeletonMotion, max_epoch: int, lr: float,process_idx, **kwargs)->SkeletonMotion:
         self.motion_local_rotation = motion_data.local_rotation.to(device=self.device)
-        self.motion_root_rotation = motion_data.local_rotation[:, 0, :].to(device=self.device)
+        # self.motion_root_rotation = motion_data.local_rotation[:, 0, :].to(device=self.device)
         self.motion_length, self.joint_num, _ = self.motion_local_rotation.shape
         self.motion_root_translation = motion_data.root_translation.to(device=self.device)
 
         super(HuRetargetOptimizer,self).train(motion_data,max_epoch,lr,process_idx,**kwargs)
-
-        # joint_rotation_axis = torch.eye(3)[hu_rotation_axis_mapping]
-        # motion_rotation_axis = joint_rotation_axis.repeat(self.motion_length,1,1)
-        #
-        # self.motion_joint_angles = self.motion_joint_angles.cpu().detach()
-        # retargeted_local_rotation = quat_from_angle_axis(self.motion_joint_angles.reshape(-1),motion_rotation_axis.reshape(-1,3))
-        # retargeted_local_rotation = retargeted_local_rotation.reshape(self.motion_length,self.joint_num-1,4)
-        # retargeted_local_rotation = torch.concatenate([self.motion_root_rotation.unsqueeze(1), retargeted_local_rotation], dim=1)
-        #
-        # retargeted_state = SkeletonState.from_rotation_and_root_translation(
-        #     self.robot_model,
-        #     retargeted_local_rotation,
-        #     self.motion_root_translation,
-        #     is_local=True
-        # )
-        #
-        # retargeted_motion = SkeletonMotion.from_skeleton_state(retargeted_state,fps=motion_data.fps)
 
         motion_global_rotation, motion_global_translation = \
             self.forward_model.forward_kinematics(self.motion_joint_angles,self.motion_root_translation,self.motion_root_rotation)
@@ -54,26 +37,13 @@ class HuRetargetOptimizer(BaseRetargetOptimizer):
 
     def _init_params(self,**kwargs):
         self.motion_joint_angles = torch.zeros(self.motion_length, self.joint_num-1, 1,
-                                               dtype=torch.float32,requires_grad=True, device='cuda')
-        return {"motion_joint_angles": self.motion_joint_angles}
-
-    def _model_forward(self, motion_joint_angles):
-        # motion_joint_angles = motion_joint_angles.cpu()
-        # joint_rotation_axis = torch.eye(3)[Hu_DOF_IDX_MAPPING]
-        # motion_rotation_axis = joint_rotation_axis.repeat(self.motion_length,1,1)
-        # motion_local_rotation = quat_from_angle_axis(motion_joint_angles.reshape(-1),motion_rotation_axis.reshape(-1,3))
-        # motion_local_rotation = motion_local_rotation.reshape(self.motion_length,self.joint_num-1,4)
-        # # TODO: clip rotation
-        # motion_local_rotation = torch.concatenate([self.global_root_rotation.unsqueeze(1), motion_local_rotation], dim=1)
-        # assert motion_local_rotation.shape == (self.motion_length,self.joint_num,4)
-        # state = SkeletonState.from_rotation_and_root_translation(
-        #     self.robot_model,
-        #     motion_local_rotation,
-        #     self.motion_root_translation,
-        #     is_local=True
-        # )
+                                               dtype=torch.float32,requires_grad=True, device=self.device)
+        self.motion_root_rotation = torch.tensor([[[0,0,0,1]]]*self.motion_length,
+                                                 dtype=torch.float32, requires_grad=True,device=self.device)
+        return {"motion_joint_angles": self.motion_joint_angles,"motion_root_rotation": self.motion_root_rotation}
+    def _model_forward(self, motion_joint_angles,motion_root_rotation):
         motion_global_rotation, motion_global_translation = \
-            self.forward_model.forward_kinematics(motion_joint_angles,self.motion_root_translation,self.motion_root_rotation)
+            self.forward_model.forward_kinematics(motion_joint_angles,self.motion_root_translation,motion_root_rotation)
         return motion_global_translation
     def _cal_loss(self, forward_model_output, motion_data:SkeletonMotion) -> Union[torch.Tensor, torch.nn.Module]:
         return self.loss_fun(forward_model_output, motion_data.global_translation.to(self.device))
@@ -85,9 +55,21 @@ class HuRetargetOptimizer(BaseRetargetOptimizer):
 
 
 class HuRetargetLossFun(torch.nn.Module):
-    def __init__(self):
+    def __init__(self,device="cuda:0"):
         super().__init__()
-        self.error_loss = torch.nn.MSELoss()
+        self.device = device
+        self.error_loss = torch.nn.MSELoss(reduction='none')
+        self.loss_weight = torch.Tensor([
+            0,
+            0, 0, 0, 1, 1,1,
+            0, 0, 0, 1, 1,1,
+            0,
+            2, 2, 1, 1, 1, 1, 2, 1, 1,
+            2, 2, 1, 1, 1, 1, 2, 1, 1,
+            2,
+        ]).to(self.device).view(1,33,1)
     def forward(self, input, target):
+        motion_length, _, _ = input.shape
         loss = self.error_loss(input, target)
-        return loss
+        loss = loss * self.loss_weight
+        return loss.mean()
