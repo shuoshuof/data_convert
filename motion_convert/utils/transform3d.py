@@ -25,8 +25,8 @@ def coord_transform(p,order:list,dir=None):
         p = p* dir
     return p
 
-def cal_joint_quat(t_pose_local_translation, motion_local_translation):
-    A = torch.einsum('bij,bjk->bik', motion_local_translation.permute(0, 2, 1), t_pose_local_translation)
+def cal_joint_quat(standard_pose_local_translation, motion_local_translation):
+    A = torch.einsum('bij,bjk->bik', motion_local_translation.permute(0, 2, 1), standard_pose_local_translation)
     U, _, Vt = torch.linalg.svd(A)
     R_matrix = torch.einsum('bij,bjk->bik', U, Vt)
 
