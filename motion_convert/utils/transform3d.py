@@ -1,5 +1,7 @@
+import numpy as np
 import torch
-from poselib.poselib.core.rotation3d import quat_normalize
+from poselib.poselib.core.rotation3d import *
+
 @torch.jit.script
 def quat_between_two_vecs(vec1, vec2):
     if torch.norm(vec1,dim=-1).max() <= 1e-6 or torch.norm(vec2,dim=-1).max() <= 1e-6:
@@ -15,6 +17,27 @@ def quat_between_two_vecs(vec1, vec2):
     quat = quat_normalize(quat)
 
     return quat
+
+
+def coord_transform(p,order:list,dir=None):
+    p = p[...,order]
+    if dir is not None:
+        p = p* dir
+    return p
+
+def cal_joint_quat(t_pose_local_translation, motion_local_translation):
+    A = torch.einsum('bij,bjk->bik', motion_local_translation.permute(0, 2, 1), t_pose_local_translation)
+    U, _, Vt = torch.linalg.svd(A)
+    R_matrix = torch.einsum('bij,bjk->bik', U, Vt)
+
+    det = torch.linalg.det(R_matrix)
+    Vt[det < 0, -1, :] *= -1
+    R_matrix = torch.einsum('bij,bjk->bik', U, Vt)
+
+    # rotation = sRot.from_matrix(R_matrix)
+    # quats = rotation.as_quat()
+    quats = quat_from_rotation_matrix(R_matrix)
+    return quats
 
 
 

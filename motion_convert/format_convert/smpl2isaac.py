@@ -56,7 +56,7 @@ def convert2isaac(data):
 
     with open('asset/smpl/smpl_skeleton_tree.pkl', 'rb') as f:
         skeleton_tree = pickle.load(f)
-    root_trans_offset = transl + skeleton_tree.sk_local_translation[0]
+    root_trans_offset = transl + skeleton_tree.local_translation[0]
 
     new_sk_state = SkeletonState.from_rotation_and_root_translation(
         skeleton_tree,

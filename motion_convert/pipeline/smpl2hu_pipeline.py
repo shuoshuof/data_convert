@@ -17,33 +17,16 @@ from poselib.poselib.visualization.common import *
 from body_visualizer.body_visualizer import BodyVisualizer
 from motion_convert.pipeline.base_pipeline import BasePipeline
 from motion_convert.format_convert.smpl2isaac import convert2isaac
-from motion_convert.utils.rotation import *
+from motion_convert.utils.transform3d import *
+from motion_convert.utils.motion_filters import filter_data
 from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
 from motion_convert.utils.motion_process import fix_root,move_feet_on_the_ground
-JOINT_MAPPING_v1 = {
-    'Pelvis': 'pelvis_link',
-    'L_Hip': 'left_hip_pitch_link',
-    'L_Knee': 'left_knee_link',
-    'L_Ankle': 'left_ankle_link',
-    'R_Hip': 'right_hip_pitch_link',
-    'R_Knee': 'right_knee_link',
-    'R_Ankle': 'right_ankle_link',
-    # 'Torso': 'torso_link',
-    # # 'Spine': 'torso_link',
-    'Chest': 'torso_link',
-    'Head': 'neck_link',
-    'L_Shoulder': 'left_shoulder_roll_link',
-    'L_Elbow': 'left_elbow_pitch_link',
-    'L_Wrist': 'left_wrist_yaw_link',
-    'R_Shoulder': 'right_shoulder_roll_link',
-    'R_Elbow': 'right_elbow_pitch_link',
-    'R_Wrist': 'right_wrist_yaw_link',
-}
+from motion_convert.robot_config.Hu import *
 
 class SMPL2HuPipeline(BasePipeline):
     def __init__(self, motion_dir: str, save_dir: str, num_processes: int = None):
         super().__init__(motion_dir, save_dir, num_processes)
-        self.smpl_t_pose,self.hu_t_pose,self.smpl_skeleton_tree,self.hu_skeleton_tree = self._load_asset()
+        self.smpl_t_pose,self.hu_zero_pose,self.smpl_skeleton_tree,self.hu_skeleton_tree = self._load_asset()
 
     def _read_data(self, **kwargs) -> list:
         motion_paths = [os.path.join(self.motion_dir, f) for f in os.listdir(self.motion_dir) if
@@ -54,12 +37,12 @@ class SMPL2HuPipeline(BasePipeline):
     def _load_asset(self)->[SkeletonState, SkeletonState,SkeletonTree, SkeletonTree]:
         with open('asset/t_pose/smpl_t_pose.pkl','rb') as f:
             smpl_t_pose = pickle.load(f)
-        with open('asset/t_pose/hu_t_pose.pkl','rb') as f:
-            hu_t_pose = pickle.load(f)
+        with open('asset/zero_pose/hu_zero_pose.pkl','rb') as f:
+            hu_zero_pose = pickle.load(f)
         with open('asset/smpl/smpl_skeleton_tree.pkl','rb') as f:
             smpl_skeleton_tree = pickle.load(f)
-        hu_skeleton_tree = hu_t_pose.skeleton_tree
-        return smpl_t_pose,hu_t_pose,smpl_skeleton_tree,hu_skeleton_tree
+        hu_skeleton_tree = hu_zero_pose.skeleton_tree
+        return smpl_t_pose,hu_zero_pose,smpl_skeleton_tree,hu_skeleton_tree
     def _rebuild_with_smpl_t_pose(self,motion:SkeletonMotion)->SkeletonMotion:
         motion_fps = motion.fps
 
@@ -117,9 +100,9 @@ class SMPL2HuPipeline(BasePipeline):
             rebuilt_motion = self._rebuild_with_smpl_t_pose(smpl_motion)
 
             target_motion = copy.deepcopy(rebuilt_motion).retarget_to_by_tpose(
-                joint_mapping=JOINT_MAPPING_v1,
+                joint_mapping=SMPL2HU_JOINT_MAPPING,
                 source_tpose=self.smpl_t_pose,
-                target_tpose=self.hu_t_pose,
+                target_tpose=self.hu_zero_pose,
                 rotation_to_target_skeleton=torch.Tensor([0,0,0,1]),
                 scale_to_target_skeleton=1.,
             )
@@ -136,8 +119,18 @@ class SMPL2HuPipeline(BasePipeline):
                 retargeted_motion = fix_root(retargeted_motion)
             if kwargs.get('move_to_ground',False):
                 retargeted_motion = move_feet_on_the_ground(retargeted_motion)
+            if kwargs.get('filter',False):
+                filtered_motion_local_rotation = torch.stack(filter_data(retargeted_motion.local_rotation))
+                retargeted_motion = SkeletonState.from_rotation_and_root_translation(
+                    retargeted_motion.skeleton_tree,
+                    filtered_motion_local_rotation,
+                    retargeted_motion.global_translation[:,0,:],
+                    is_local=True
+                )
+                retargeted_motion = SkeletonMotion.from_skeleton_state(retargeted_motion,fps=motion_fps)
 
-            # plot_skeleton_H([target_motion,retargeted_motion])
+
+
             motion_dict = {}
             motion_dict['pose_quat_global'] = retargeted_motion.global_rotation.numpy()
             motion_dict['pose_quat'] = retargeted_motion.local_rotation.numpy()
@@ -154,8 +147,10 @@ class SMPL2HuPipeline(BasePipeline):
             with open(f'{self.save_dir}/{file_name}_motion.pkl', 'wb') as f:
                 joblib.dump(retargeted_motion,f)
 
+            # plot_skeleton_H([target_motion,retargeted_motion])
+
 if __name__ == '__main__':
 
-    smpl2hu_pipeline = SMPL2HuPipeline(motion_dir='test_data/forward_test',
-                                      save_dir='test_data/hu_data')
-    smpl2hu_pipeline.run(debug=False,max_epoch=200,fix_root=True,move_to_ground=True,)
+    smpl2hu_pipeline = SMPL2HuPipeline(motion_dir='motion_data/10_24/10_24_smpl',
+                                      save_dir='motion_data/10_24/10_24_hu')
+    smpl2hu_pipeline.run(debug=False,max_epoch=400,fix_root=True,move_to_ground=True,filter=True)

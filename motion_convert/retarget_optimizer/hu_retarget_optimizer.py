@@ -40,6 +40,7 @@ class HuRetargetOptimizer(BaseRetargetOptimizer):
                                                  dtype=torch.float32, requires_grad=True,device=self.device)
         return {"motion_joint_angles": self.motion_joint_angles,"motion_root_rotation": self.motion_root_rotation}
     def _model_forward(self, motion_joint_angles,motion_root_rotation):
+
         motion_global_rotation, motion_global_translation = \
             self.forward_model.forward_kinematics(motion_joint_angles,self.motion_root_translation,motion_root_rotation)
         return motion_global_translation
@@ -57,17 +58,19 @@ class HuRetargetLossFun(torch.nn.Module):
         super().__init__()
         self.device = device
         self.error_loss = torch.nn.MSELoss(reduction='none')
-        self.loss_weight = torch.Tensor([
+        self.joint_error_weight = torch.Tensor([
             0,
-            0, 0, 0, 1, 2,1,
-            0, 0, 0, 1, 2,1,
+            0, 0, 1, 2, 1,0,
+            0, 0, 1, 2, 1,0,
             0,
             2, 2, 1, 1, 1, 1, 2, 1, 1,
             2, 2, 1, 1, 1, 1, 2, 1, 1,
             2,
         ]).to(self.device).view(1,33,1)
+        self.smooth_loss_weight = 1
     def forward(self, input, target):
         motion_length, _, _ = input.shape
-        loss = self.error_loss(input, target)
-        loss = loss * self.loss_weight
-        return loss.mean()
+        error_loss = self.error_loss(input, target)* self.joint_error_weight
+        smooth_loss = (input[1:,...] - input[:-1,...])**2
+        loss = self.smooth_loss_weight*smooth_loss.mean()+error_loss.mean()
+        return loss
