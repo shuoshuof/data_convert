@@ -63,8 +63,8 @@ class HuRetargetLossFun(torch.nn.Module):
             0, 0, 1, 2, 2,2,
             0, 0, 1, 2, 2,2,
             0,
-            2, 2, 1, 1, 1, 1, 2, 1, 1,
-            2, 2, 1, 1, 1, 1, 2, 1, 1,
+            2, 2, 1, 1, 1, 2, 2, 0, 0,
+            2, 2, 1, 1, 1, 2, 2, 0, 0,
             2,
         ]).to(self.device).view(1,33,1)
         self.smooth_loss_weight = 1

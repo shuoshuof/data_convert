@@ -18,7 +18,7 @@ from motion_convert.retarget_optimizer.noitom_retarget_optimizer import NoitomRe
 from motion_convert.utils.transform3d import *
 from motion_convert.robot_config.Hu import NOITOM2HU_JOINT_MAPPING,hu_graph
 from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
-from motion_convert.utils.motion_process import fix_root,move_feet_on_the_ground,rescale_motion_to_standard_size
+from motion_convert.utils.motion_process import fix_root,move_feet_on_the_ground,rescale_motion_to_standard_size,fix_joints
 from motion_convert.utils.motion_filters import filter_data
 
 from scripts.process_noitom_mocap import *
@@ -52,19 +52,22 @@ class ConvertNoitomPipeline(BasePipeline):
         parent_indices = self.noitom_zero_pose.skeleton_tree.parent_indices
 
         joint0_quat = cal_joint_quat(
-            zero_pose_local_translation[:,[1,4,7]],
-            motion_global_translation[:,[1,4,7]]-motion_global_translation[:,[0]]
+            zero_pose_local_translation[:,[4,1,7]],
+            motion_global_translation[:,[4,1,7]]-motion_global_translation[:,[0]]
         )
+        # joint8_quat = cal_joint_quat(
+        #     zero_pose_local_translation[:,[9,17,13]],
+        #     motion_global_translation[:,[9,17,13]]-motion_global_translation[:,[8]]
+        # )
         joint8_quat = cal_joint_quat(
             zero_pose_local_translation[:,[17,13,9]],
             motion_global_translation[:,[17,13,9]]-motion_global_translation[:,[8]]
         )
-
         rebuilt_motion_global_rotation[:,[0,8],:] = \
             torch.concatenate([joint0_quat.unsqueeze(1),joint8_quat.unsqueeze(1)],dim=1)
 
         for joint_idx,parent_idx in enumerate(parent_indices):
-            if joint_idx == 0 or joint_idx == 8:
+            if joint_idx == 0 or parent_idx == 0 or parent_idx==8:
                 continue
             else:
                 rebuilt_motion_global_rotation[:,parent_idx,:] = quat_between_two_vecs(
@@ -94,13 +97,13 @@ class ConvertNoitomPipeline(BasePipeline):
             motion_global_translation = get_motion_translation(mocap_data)
             motion_global_translation = torch.Tensor(motion_global_translation)
             motion_global_translation = coord_transform(motion_global_translation, order=[2, 0, 1],dir=torch.Tensor([1,1,1]))
-
+            # vis_noitom(motion_global_translation)
             motion_global_translation = rescale_motion_to_standard_size(motion_global_translation,self.noitom_zero_pose.skeleton_tree)
-            vis_noitom(motion_global_translation)
+            # vis_noitom(motion_global_translation)
 
             rebuilt_motion = self._rebuild_with_noitom_zero_pose(motion_global_translation)
 
-            vis_noitom(rebuilt_motion.global_translation)
+            # vis_noitom(rebuilt_motion.global_translation)
 
             target_motion = copy.deepcopy(rebuilt_motion).retarget_to_by_tpose(
                 joint_mapping=NOITOM2HU_JOINT_MAPPING,
@@ -109,7 +112,8 @@ class ConvertNoitomPipeline(BasePipeline):
                 rotation_to_target_skeleton=torch.Tensor([0, 0, 0, 1]),
                 scale_to_target_skeleton=1.,
             )
-
+            # vis_hu(target_motion.global_translation)
+            # plot_skeleton_H([target_motion])
             max_epoch = kwargs.get('max_epoch',500)
             lr = kwargs.get('lr',1e-1)
             retargeted_motion = hu_retarget_optimizer.train(
@@ -132,7 +136,9 @@ class ConvertNoitomPipeline(BasePipeline):
                     is_local=True
                 )
                 retargeted_motion = SkeletonMotion.from_skeleton_state(retargeted_motion,fps=motion_fps)
-
+            if kwargs.get('fix_joints',False):
+                retargeted_motion = fix_joints(retargeted_motion,joint_indices=[18,19,20,21,22, 27,28,29,30,31, 32])
+            # vis_hu(retargeted_motion.global_translation)
 
             motion_dict = {}
             motion_dict['pose_quat_global'] = retargeted_motion.global_rotation.numpy()
@@ -151,7 +157,7 @@ class ConvertNoitomPipeline(BasePipeline):
                 joblib.dump(retargeted_motion,f)
 
 
-            plot_skeleton_H([rebuilt_motion,target_motion,retargeted_motion])
+            # plot_skeleton_H([rebuilt_motion,target_motion,retargeted_motion])
             from motion_convert.robot_config.NOITOM import noitom_graph
             # bd_vis = BodyVisualizer(noitom_graph,static_frame=False)
             # for global_trans in motion_global_translation:
@@ -170,14 +176,16 @@ class ConvertNoitomPipeline(BasePipeline):
 
 def vis_noitom(motion_global_translation):
     bd_vis = BodyVisualizer(noitom_graph,static_frame=False)
+    motion_global_translation = motion_global_translation.reshape(-1,21,3)
     for global_trans in motion_global_translation:
         bd_vis.step(global_trans)
 def vis_hu(motion_global_translation):
     bd_vis = BodyVisualizer(hu_graph,static_frame=False)
+    motion_global_translation = motion_global_translation.reshape(-1,33,3)
     for global_trans in motion_global_translation:
         bd_vis.step(global_trans)
 
 if __name__ == '__main__':
-    noitom_pipeline = ConvertNoitomPipeline(motion_dir='test_data/noitom_mocap_data',
+    noitom_pipeline = ConvertNoitomPipeline(motion_dir='test_data/moitom_mocap',
                                             save_dir='motion_data/10_24_noitom_mocap_data',)
-    noitom_pipeline.run(debug=True,max_epoch=300,filter=True)
+    noitom_pipeline.run(debug=False,max_epoch=400,filter=False,fix_joints=True)

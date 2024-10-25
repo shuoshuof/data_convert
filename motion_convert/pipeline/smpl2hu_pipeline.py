@@ -151,6 +151,6 @@ class SMPL2HuPipeline(BasePipeline):
 
 if __name__ == '__main__':
 
-    smpl2hu_pipeline = SMPL2HuPipeline(motion_dir='motion_data/10_24/10_24_smpl',
-                                      save_dir='motion_data/10_24/10_24_hu')
+    smpl2hu_pipeline = SMPL2HuPipeline(motion_dir='motion_data/10_25/smpl',
+                                      save_dir='motion_data/10_25/hu')
     smpl2hu_pipeline.run(debug=False,max_epoch=400,fix_root=True,move_to_ground=True,filter=True)

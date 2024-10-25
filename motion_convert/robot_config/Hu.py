@@ -53,7 +53,7 @@ NOITOM2HU_JOINT_MAPPING = {
     'RightFoot': 'right_ankle_link',
     # 'Torso': 'torso_link',
     # # 'Spine': 'torso_link',
-    'Spine2': 'torso_link',
+    'Spine1': 'torso_link',
     'Neck': 'neck_link',
     'LeftArm': 'left_shoulder_roll_link',
     'LeftForeArm': 'left_elbow_pitch_link',
@@ -63,18 +63,18 @@ NOITOM2HU_JOINT_MAPPING = {
     'RightHand': 'right_wrist_yaw_link',
 }
 
-# # TODO:反着为什么对?
+# # # TODO:反着为什么对?
 # NOITOM2HU_JOINT_MAPPING = {
 #     'Hips': 'pelvis_link',
-#     'RightUpLeg': 'left_hip_pitch_link',
-#     'RightLeg': 'left_knee_link',
-#     'RightFoot': 'left_ankle_link',
-#     'LeftUpLeg': 'right_hip_pitch_link',
-#     'LeftLeg': 'right_knee_link',
-#     'LeftFoot': 'right_ankle_link',
+#     # 'RightUpLeg': 'left_hip_pitch_link',
+#     # 'RightLeg': 'left_knee_link',
+#     # 'RightFoot': 'left_ankle_link',
+#     # 'LeftUpLeg': 'right_hip_pitch_link',
+#     # 'LeftLeg': 'right_knee_link',
+#     # 'LeftFoot': 'right_ankle_link',
 #     # 'Torso': 'torso_link',
 #     # # 'Spine': 'torso_link',
-#     'Spine2': 'torso_link',
+#     'Spine1': 'torso_link',
 #     'Neck': 'neck_link',
 #     'RightArm': 'left_shoulder_roll_link',
 #     'RightForeArm': 'left_elbow_pitch_link',
@@ -87,11 +87,11 @@ NOITOM2HU_JOINT_MAPPING = {
 
 
 HU_CONNECTIONS = [(0,1),(1,2),(2,3),(3,4),(4,5),(5,6),
-                      (0,7),(7,8),(8,9),(9,10),(10,11),(11,12),
-                      (0,13),
-                      (13,14),(14,15),(15,16),(16,17),(17,18),(18,19),(19,20),(20,21),(21,22),
-                      (13,23),(23,24),(24,25),(25,26),(26,27),(27,28),(28,29),(29,30),(30,31),
-                      (13,32)]
+                  (0,7),(7,8),(8,9),(9,10),(10,11),(11,12),
+                  (0,13),
+                  (13,14),(14,15),(15,16),(16,17),(17,18),(18,19),(19,20),(20,21),(21,22),
+                  (13,23),(23,24),(24,25),(25,26),(26,27),(27,28),(28,29),(29,30),(30,31),
+                  (13,32)]
 
 HU_JOINT_NAMES = [i for i in range(33)]
 

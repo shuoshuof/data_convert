@@ -30,7 +30,7 @@ class HuForwardModel(BaseForwardModel):
         # hu_dof_high_limit = torch.Tensor(Hu_DOF_UPPER).reshape(1,-1,1).to(self.device)
         hu_dof_low_limit = torch.Tensor(hu_lower).reshape(1,-1,1).to(self.device)
         hu_dof_high_limit = torch.Tensor(hu_upper).reshape(1,-1,1).to(self.device)
-        motion_joint_angles = torch.clamp(motion_joint_angles,min=hu_dof_low_limit,max=hu_dof_high_limit)
+        # motion_joint_angles = torch.clamp(motion_joint_angles,min=hu_dof_low_limit,max=hu_dof_high_limit)
         # TODO: clip rotation
         motion_rotation_axis = self.joint_rotation_axis.repeat(motion_length,1,1).clone().to(self.device)
         motion_local_rotation = quat_from_angle_axis(motion_joint_angles.reshape(-1),motion_rotation_axis.reshape(-1,3))
