@@ -19,7 +19,7 @@ class BasePipeline(ABC):
     def _split_data(self,data,**kwargs)->Union[list,np.ndarray]:
         pass
     @abstractmethod
-    def _process_data(self,data_chunk,results,process_idx,**kwargs):
+    def _process_data(self,data_chunk,results,process_idx,debug,**kwargs):
         pass
     def run(self,debug=False,**kwargs):
         data = self._read_data(**kwargs)
@@ -37,7 +37,7 @@ class BasePipeline(ABC):
             processes = []
             for process_idx in range(self.num_processes):
                 p = multiprocessing.Process(target=self._process_data,
-                                            args=(data_chunks[process_idx], results, process_idx),
+                                            args=(data_chunks[process_idx], results, process_idx,debug),
                                             kwargs=kwargs)
                 processes.append(p)
                 p.start()

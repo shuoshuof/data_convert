@@ -1,33 +1,19 @@
-import os
-from tqdm import tqdm
 import copy
-from abc import ABC, abstractmethod
-from typing import Optional, Union
 import joblib
 import pickle
-import math
-import torch
-import numpy as np
-from scipy.spatial.transform import Rotation as sRot
 
-from poselib.poselib.core.rotation3d import quat_mul,quat_rotate
-from poselib.poselib.skeleton.skeleton3d import SkeletonTree,SkeletonMotion,SkeletonState
 from poselib.poselib.visualization.common import *
 
-from body_visualizer.body_visualizer import BodyVisualizer
 from motion_convert.pipeline.base_pipeline import BasePipeline
-from motion_convert.format_convert.smpl2isaac import convert2isaac
 from motion_convert.utils.transform3d import *
-from motion_convert.utils.motion_filters import filter_data
 from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
-from motion_convert.utils.motion_process import fix_root,move_feet_on_the_ground
+from motion_convert.utils.motion_process import *
 from motion_convert.robot_config.Hu import *
 
 class SMPL2HuPipeline(BasePipeline):
     def __init__(self, motion_dir: str, save_dir: str, num_processes: int = None):
         super().__init__(motion_dir, save_dir, num_processes)
         self.smpl_t_pose,self.hu_zero_pose,self.smpl_skeleton_tree,self.hu_skeleton_tree = self._load_asset()
-
     def _read_data(self, **kwargs) -> list:
         motion_paths = [os.path.join(self.motion_dir, f) for f in os.listdir(self.motion_dir) if
                               os.path.isfile(os.path.join(self.motion_dir, f))]
@@ -74,8 +60,9 @@ class SMPL2HuPipeline(BasePipeline):
         return new_motion
 
 
-    def _process_data(self,data_chunk,results,process_idx,**kwargs):
+    def _process_data(self,data_chunk,results,process_idx,debug,**kwargs):
         hu_retarget_optimizer = HuRetargetOptimizer(self.hu_skeleton_tree)
+        process_manager = MotionProcessManager()
         for path in data_chunk:
             with open(path,'rb') as f:
                 motion_data = joblib.load(f)
@@ -115,27 +102,14 @@ class SMPL2HuPipeline(BasePipeline):
                 lr=lr,
                 process_idx=process_idx
             )
-            if kwargs.get('fix_root',False):
-                retargeted_motion = fix_root(retargeted_motion)
-            if kwargs.get('move_to_ground',False):
-                retargeted_motion = move_feet_on_the_ground(retargeted_motion)
-            if kwargs.get('filter',False):
-                filtered_motion_local_rotation = torch.stack(filter_data(retargeted_motion.local_rotation))
-                retargeted_motion = SkeletonState.from_rotation_and_root_translation(
-                    retargeted_motion.skeleton_tree,
-                    filtered_motion_local_rotation,
-                    retargeted_motion.global_translation[:,0,:],
-                    is_local=True
-                )
-                retargeted_motion = SkeletonMotion.from_skeleton_state(retargeted_motion,fps=motion_fps)
 
-
+            result_motion = process_manager.process_motion(retargeted_motion,**kwargs)
 
             motion_dict = {}
-            motion_dict['pose_quat_global'] = retargeted_motion.global_rotation.numpy()
-            motion_dict['pose_quat'] = retargeted_motion.local_rotation.numpy()
+            motion_dict['pose_quat_global'] = result_motion.global_rotation.numpy()
+            motion_dict['pose_quat'] = result_motion.local_rotation.numpy()
             motion_dict['trans_orig'] = None
-            motion_dict['root_trans_offset'] = retargeted_motion.root_translation.numpy()
+            motion_dict['root_trans_offset'] = result_motion.root_translation.numpy()
             motion_dict['target'] = "hu"
             motion_dict['pose_aa'] = None
             motion_dict['fps'] = motion_fps
@@ -145,12 +119,18 @@ class SMPL2HuPipeline(BasePipeline):
             with open(f'{self.save_dir}/{file_name}.pkl', 'wb') as f:
                 joblib.dump(save_dict,f)
             with open(f'{self.save_dir}/{file_name}_motion.pkl', 'wb') as f:
-                joblib.dump(retargeted_motion,f)
+                joblib.dump(result_motion,f)
 
-            # plot_skeleton_H([target_motion,retargeted_motion])
+            # plot_skeleton_H([target_motion,result_motion])
 
 if __name__ == '__main__':
 
     smpl2hu_pipeline = SMPL2HuPipeline(motion_dir='motion_data/10_25/smpl',
                                       save_dir='motion_data/10_25/hu')
-    smpl2hu_pipeline.run(debug=False,max_epoch=400,fix_root=True,move_to_ground=True,filter=True)
+    smpl2hu_pipeline.run(
+        debug=False,
+        max_epoch=400,
+        fix_root=False,
+        move_to_ground=True,
+        filter=True
+    )

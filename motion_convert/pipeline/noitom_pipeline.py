@@ -18,8 +18,8 @@ from motion_convert.retarget_optimizer.noitom_retarget_optimizer import NoitomRe
 from motion_convert.utils.transform3d import *
 from motion_convert.robot_config.Hu import NOITOM2HU_JOINT_MAPPING,hu_graph
 from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
-from motion_convert.utils.motion_process import fix_root,move_feet_on_the_ground,rescale_motion_to_standard_size,fix_joints
-from motion_convert.utils.motion_filters import filter_data
+from motion_convert.utils.motion_process import fix_root, move_feet_on_the_ground, rescale_motion_to_standard_size, \
+    fix_joints, filter_data
 
 from scripts.process_noitom_mocap import *
 
@@ -89,7 +89,7 @@ class ConvertNoitomPipeline(BasePipeline):
 
 
 
-    def _process_data(self,data_chunk,results,process_idx,**kwargs):
+    def _process_data(self,data_chunk,results,process_idx,debug,**kwargs):
         hu_retarget_optimizer = HuRetargetOptimizer(self.hu_skeleton_tree)
         for path  in data_chunk:
             file_name = os.path.basename(path).split('.')[0]
@@ -138,7 +138,7 @@ class ConvertNoitomPipeline(BasePipeline):
                 retargeted_motion = SkeletonMotion.from_skeleton_state(retargeted_motion,fps=motion_fps)
             if kwargs.get('fix_joints',False):
                 retargeted_motion = fix_joints(retargeted_motion,joint_indices=[18,19,20,21,22, 27,28,29,30,31, 32])
-            # vis_hu(retargeted_motion.global_translation)
+            vis_hu(retargeted_motion.global_translation)
 
             motion_dict = {}
             motion_dict['pose_quat_global'] = retargeted_motion.global_rotation.numpy()
@@ -188,4 +188,4 @@ def vis_hu(motion_global_translation):
 if __name__ == '__main__':
     noitom_pipeline = ConvertNoitomPipeline(motion_dir='test_data/moitom_mocap',
                                             save_dir='motion_data/10_24_noitom_mocap_data',)
-    noitom_pipeline.run(debug=False,max_epoch=400,filter=False,fix_joints=True)
+    noitom_pipeline.run(debug=False,max_epoch=500,filter=True,fix_joints=True)

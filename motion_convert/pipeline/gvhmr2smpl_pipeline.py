@@ -49,7 +49,7 @@ class ConvertGVHMRPipeline(BasePipeline):
         global_orient = torch.Tensor(global_orient)
         return global_orient, transl
 
-    def _process_data(self,data_chunk,results,process_idx,**kwargs):
+    def _process_data(self,data_chunk,results,process_idx,debug,**kwargs):
         for path  in data_chunk:
             motion_data = torch.load(path)
             body_pose = motion_data['smpl_params_global']['body_pose']
