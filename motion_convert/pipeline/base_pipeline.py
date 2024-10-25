@@ -32,7 +32,7 @@ class BasePipeline(ABC):
         os.makedirs(self.save_dir,exist_ok=True)
 
         if debug:
-            self._process_data(data_chunks[0], results, 0,**kwargs)
+            self._process_data(data_chunks[0], results, 0,debug,**kwargs)
         else:
             processes = []
             for process_idx in range(self.num_processes):

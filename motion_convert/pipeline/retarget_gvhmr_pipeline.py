@@ -50,7 +50,7 @@ class GVHMRPipeline(BasePipeline):
         new_motion[..., 1] = -rebuilt_motion[..., 0]
         new_motion[..., 2] = rebuilt_motion[..., 1]
         return new_motion
-    def _process_data(self,data_chunk,results,process_idx,debug,**kwargs):
+    def _process_data(self,data_chunk,results,process_idx,**kwargs):
         smpl_retarget_optimizer = BaseSMPLRetargetOptimizer(smpl_model_path=self.smpl_model_path)
         for path in data_chunk:
             motion_data = torch.load(path)
