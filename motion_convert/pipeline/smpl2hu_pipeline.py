@@ -61,7 +61,7 @@ class SMPL2HuPipeline(BasePipeline):
 
 
     def _process_data(self,data_chunk,results,process_idx,debug,**kwargs):
-        hu_retarget_optimizer = HuRetargetOptimizer(self.hu_skeleton_tree)
+        hu_retarget_optimizer = HuRetargetOptimizer(self.hu_skeleton_tree,kwargs.get('clip_angle',True))
         process_manager = MotionProcessManager()
         for path in data_chunk:
             with open(path,'rb') as f:
@@ -125,12 +125,13 @@ class SMPL2HuPipeline(BasePipeline):
 
 if __name__ == '__main__':
 
-    smpl2hu_pipeline = SMPL2HuPipeline(motion_dir='motion_data/10_25/smpl',
-                                      save_dir='motion_data/10_25/hu')
+    smpl2hu_pipeline = SMPL2HuPipeline(motion_dir='motion_data/10_24_1/smpl',
+                                      save_dir='motion_data/10_24_1/hu')
     smpl2hu_pipeline.run(
         debug=False,
         max_epoch=400,
         fix_root=False,
         move_to_ground=True,
-        filter=True
+        filter=False,
+        clip_angle=True
     )
