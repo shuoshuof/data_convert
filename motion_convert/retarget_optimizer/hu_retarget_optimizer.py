@@ -7,7 +7,6 @@ from poselib.poselib.core.rotation3d import *
 from motion_convert.retarget_optimizer.base_retarget_optimizer import BaseRetargetOptimizer
 from motion_convert.forward_model.hu_forward_model import HuForwardModel
 
-from motion_convert.robot_config.Hu import Hu_DOF_LOWER,Hu_DOF_UPPER
 class HuRetargetOptimizer(BaseRetargetOptimizer):
     def __init__(self,hu_sk_tree:SkeletonTree,clip_angle=True):
         super(HuRetargetOptimizer,self).__init__()
@@ -66,7 +65,7 @@ class HuRetargetLossFun(torch.nn.Module):
             2, 2, 1, 1, 1, 2, 2, 0, 0,
             2,
         ]).to(self.device).view(1,33,1)
-        self.smooth_loss_weight = 0
+        self.smooth_loss_weight = 0.2
     def forward(self, input, target):
         motion_length, _, _ = input.shape
         error_loss = self.error_loss(input, target)* self.joint_error_weight

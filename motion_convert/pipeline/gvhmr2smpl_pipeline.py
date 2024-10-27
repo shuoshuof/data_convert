@@ -12,7 +12,7 @@ from poselib.poselib.core.rotation3d import quat_mul,quat_rotate
 from motion_convert.pipeline.base_pipeline import BasePipeline
 from motion_convert.format_convert.smpl2isaac import convert2isaac
 
-class ConvertGVHMRPipeline(BasePipeline):
+class GVHMR2SMPLPipeline(BasePipeline):
     def __init__(self,motion_dir:str,save_dir:str,num_processes:int=None):
         super().__init__(motion_dir,save_dir,num_processes)
 
@@ -80,6 +80,6 @@ class ConvertGVHMRPipeline(BasePipeline):
 
 
 if __name__ == '__main__':
-    pipeline = ConvertGVHMRPipeline(motion_dir='motion_data/10_25/cam_out',
-                                    save_dir='motion_data/10_25/smpl',)
+    pipeline = GVHMR2SMPLPipeline(motion_dir='motion_data/10_25/cam_out',
+                                  save_dir='motion_data/10_25/smpl', )
     pipeline.run(debug=False)

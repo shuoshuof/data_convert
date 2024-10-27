@@ -4,7 +4,7 @@ import numpy as np
 import pickle
 from poselib.poselib.skeleton.skeleton3d import SkeletonTree, SkeletonMotion, SkeletonState
 from scipy.spatial.transform import Rotation as sRot
-from body_visualizer.body_visualizer import BodyVisualizer
+from body_visualizer.visualizer import BodyVisualizer
 
 
 smpl_joint_names = [

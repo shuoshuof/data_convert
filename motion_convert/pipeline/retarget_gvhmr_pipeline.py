@@ -11,7 +11,7 @@ from motion_convert.pipeline.base_pipeline import BasePipeline
 from motion_convert.retarget_optimizer.smpl_retarget_optimizer import BaseSMPLRetargetOptimizer
 from motion_convert.format_convert.smpl2isaac import convert2isaac
 
-class GVHMRPipeline(BasePipeline):
+class RetargetGVHMR2SMPLPipeline(BasePipeline):
     def __init__(self,motion_dir:str,save_dir:str,smpl_model_path,num_processes:int=None):
         super().__init__(motion_dir,save_dir,num_processes)
         self.smpl_model_path = smpl_model_path
@@ -76,7 +76,7 @@ class GVHMRPipeline(BasePipeline):
 
 
 if __name__ == '__main__':
-    gvhmr_pipeline = GVHMRPipeline(motion_dir='test_data/pt_data1',
-                                   save_dir='test_data/retargeted_data',
-                                   smpl_model_path='asset/smpl')
+    gvhmr_pipeline = RetargetGVHMR2SMPLPipeline(motion_dir='test_data/pt_data1',
+                                                save_dir='test_data/retargeted_data',
+                                                smpl_model_path='asset/smpl')
     gvhmr_pipeline.run(debug=True,max_epoch=5000)

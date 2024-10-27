@@ -10,7 +10,7 @@ import numpy as np
 import pickle
 import pandas as pd
 
-from body_visualizer.body_visualizer import BodyVisualizer
+from body_visualizer.visualizer import BodyVisualizer
 
 
 from motion_convert.pipeline.base_pipeline import BasePipeline
@@ -157,4 +157,4 @@ def vis_hu(motion_global_translation):
 if __name__ == '__main__':
     noitom_pipeline = ConvertNoitomPipeline(motion_dir='test_data/moitom_mocap',
                                             save_dir='motion_data/10_24_noitom_mocap_data',)
-    noitom_pipeline.run(debug=True,max_epoch=500,filter=True,fix_joints=True)
+    noitom_pipeline.run(debug=False,max_epoch=400,filter=False,fix_joints=True)
