@@ -54,7 +54,7 @@ for i, keypoint_name in enumerate(NOITOM_JOINT_NAMES):
 
 noitom_graph.add_edges_from(NOITOM_CONNECTIONS)
 
-parent_indices = [-1]+[connection[0] for connection in NOITOM_CONNECTIONS]
+noitom_parent_indices = [-1] + [connection[0] for connection in NOITOM_CONNECTIONS]
 
 if __name__ == '__main__':
     import pandas as pd

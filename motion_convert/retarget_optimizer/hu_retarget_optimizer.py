@@ -65,7 +65,7 @@ class HuRetargetLossFun(torch.nn.Module):
             2, 2, 1, 1, 1, 2, 2, 0, 0,
             2,
         ]).to(self.device).view(1,33,1)
-        self.smooth_loss_weight = 0.2
+        self.smooth_loss_weight = 0.5
     def forward(self, input, target):
         motion_length, _, _ = input.shape
         error_loss = self.error_loss(input, target)* self.joint_error_weight

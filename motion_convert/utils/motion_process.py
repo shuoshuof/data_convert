@@ -1,7 +1,8 @@
-from poselib.poselib.skeleton.skeleton3d import SkeletonMotion,SkeletonState,SkeletonTree
+import numpy as np
 import torch
+from scipy.interpolate import interp1d
 
-
+from poselib.poselib.skeleton.skeleton3d import SkeletonMotion,SkeletonState,SkeletonTree
 
 def fix_root(motion:SkeletonMotion):
     new_root_translation = motion.root_translation.clone()
@@ -19,9 +20,36 @@ def move_feet_on_the_ground(motion):
         motion.skeleton_tree, motion.local_rotation, new_root_translation, is_local=True)
     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
 
+def cal_ground_height(motion:SkeletonMotion, cal_interval=2, rate = 0.2):
+    # cal interval is in seconds
+
+    motion_min_height = torch.min(motion.global_translation[:,:,2])
+    motion_length,_ = motion.root_translation.shape
+    fps = motion.fps
+    win_length = cal_interval * fps
+
+    new_motion_root_translation = motion.root_translation.clone()
+
+    ground_height = []
+    for motion_idx in range(0, len(motion.local_rotation), win_length):
+        motion_slice = motion.local_rotation[motion_idx:motion_idx+win_length]
+        min_z = torch.min(motion_slice[:,:,2],dim=1).values
+        sorted_z, indices = torch.sort(min_z)
+        ground_height.append([motion_idx,sorted_z[:int(rate*win_length)].mean()])
+
+    indices = torch.Tensor(ground_height[:][0]).numpy()
+    height = torch.Tensor(ground_height[:][1]).numpy()
+
+    motion_ground_height = np.arange(0,motion_length)
+    interp_func = interp1d(indices,height,fill_value="extrapolate")
+    interpolated_heights = torch.Tensor(interp_func(motion_ground_height))
+
+
+
+
+# @torch.jit.script
 def rescale_motion_to_standard_size(motion_global_translation, standard_skeleton:SkeletonTree):
     rescaled_motion_global_translation = motion_global_translation.clone()
-    limit = []
     for joint_idx,parent_idx in enumerate(standard_skeleton.parent_indices):
         if parent_idx == -1:
             pass
@@ -30,8 +58,6 @@ def rescale_motion_to_standard_size(motion_global_translation, standard_skeleton
                      torch.linalg.norm(standard_skeleton.local_translation[joint_idx,:],dim=0)
             rescaled_motion_global_translation[:,joint_idx,:] = rescaled_motion_global_translation[:,parent_idx,:] + \
                 (motion_global_translation[:,joint_idx,:]-motion_global_translation[:,parent_idx,:])/scale.unsqueeze(1).repeat(1,3)
-            # limit.append(scale.max())
-            # limit.append(scale.min())
     return rescaled_motion_global_translation
 
 def fix_joints(motion:SkeletonMotion, joint_indices:list):
@@ -42,6 +68,7 @@ def fix_joints(motion:SkeletonMotion, joint_indices:list):
     new_state = SkeletonState.from_rotation_and_root_translation(
         motion.skeleton_tree, new_local_rotation, new_root_translation, is_local=True)
     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
+
 
 
 class WeightedFilter:

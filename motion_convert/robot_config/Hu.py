@@ -64,6 +64,46 @@ NOITOM2HU_JOINT_MAPPING = {
     'RightHand': 'right_wrist_yaw_link',
 }
 
+VTRDYN2HU_JOINT_MAPPING = {
+    'Hips': 'pelvis_link',
+    'LeftUpperLeg': 'left_hip_pitch_link',
+    'LeftLowerLeg': 'left_knee_link',
+    'LeftFoot': 'left_ankle_link',
+    'RightUpperLeg': 'right_hip_pitch_link',
+    'RightLowerLeg': 'right_knee_link',
+    'RightFoot': 'right_ankle_link',
+    # 'Torso': 'torso_link',
+    # # 'Spine': 'torso_link',
+    'Spine3': 'torso_link',
+    'Neck': 'neck_link',
+    'LeftUpperArm': 'left_shoulder_roll_link',
+    'LeftLowerArm': 'left_elbow_pitch_link',
+    'LeftHand': 'left_wrist_yaw_link',
+    'RightUpperArm': 'right_shoulder_roll_link',
+    'RightLowerArm': 'right_elbow_pitch_link',
+    'RightHand': 'right_wrist_yaw_link',
+}
+
+VTRDYN_LITE2HU_JOINT_MAPPING = {
+    'Hips': 'pelvis_link',
+    'LeftUpperLeg': 'left_hip_pitch_link',
+    'LeftLowerLeg': 'left_knee_link',
+    'LeftFoot': 'left_ankle_link',
+    'RightUpperLeg': 'right_hip_pitch_link',
+    'RightLowerLeg': 'right_knee_link',
+    'RightFoot': 'right_ankle_link',
+    # 'Torso': 'torso_link',
+    # # 'Spine': 'torso_link',
+    'Spine1': 'torso_link',
+    'Neck': 'neck_link',
+    'LeftUpperArm': 'left_shoulder_roll_link',
+    'LeftLowerArm': 'left_elbow_pitch_link',
+    'LeftHand': 'left_wrist_yaw_link',
+    'RightUpperArm': 'right_shoulder_roll_link',
+    'RightLowerArm': 'right_elbow_pitch_link',
+    'RightHand': 'right_wrist_yaw_link',
+}
+
 
 
 
