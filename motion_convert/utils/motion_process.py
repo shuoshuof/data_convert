@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import torch
 from scipy.interpolate import interp1d
@@ -20,27 +21,30 @@ def move_feet_on_the_ground(motion):
         motion.skeleton_tree, motion.local_rotation, new_root_translation, is_local=True)
     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
 
-def height_adjustment(motion:SkeletonMotion, cal_interval=2, rate = 0.2):
+def height_adjustment(motion:SkeletonMotion, cal_interval=1.2, rate = 0.2,deg=4):
     # cal interval is in seconds
+    # 消除高度漂移，但不会过滤跳跃,乔丹滞空最多为1.2s，以此为极限
+
     motion_global_translation = motion.global_translation
     # motion_global_translation = filter_data(motion_global_translation,alpha=0.95)
     motion_min_height = torch.min(motion_global_translation[...,2].clone(),dim=1).values
     motion_length,_ = motion.root_translation.shape
     fps = motion.fps
     win_length = int(cal_interval * fps)
-
+    if (motion_length-win_length)/(win_length//2)+1<deg:
+        win_length  = math.floor(motion_length/(deg+1/2))
     new_motion_root_translation = motion.root_translation.clone()
 
     half_win = win_length // 2
-    indices = torch.arange(half_win, motion_length - half_win, step=win_length // 2)
+    motion_indices = torch.arange(half_win, motion_length - half_win, step=win_length // 2)
     min_heights = []
 
-    for motion_idx in indices:
+    for motion_idx in motion_indices:
         motion_slice = motion_global_translation[motion_idx-half_win:motion_idx+half_win, :, :].clone()
         min_z = torch.min(motion_slice[:,:,2], dim=1).values
-        sorted_z, indices = torch.sort(min_z)
+        sorted_z, sorted_indices = torch.sort(min_z)
         cal_num = max(int(rate * win_length), 1)
-        mean_index = (indices[:cal_num].float().mean() + motion_idx - half_win)
+        mean_index = (sorted_indices[:cal_num].float().mean() + motion_idx - half_win)
         mean_height = sorted_z[:cal_num].mean()
         min_heights.append((mean_index.item(), mean_height.item()))
 
@@ -48,12 +52,13 @@ def height_adjustment(motion:SkeletonMotion, cal_interval=2, rate = 0.2):
     indices = ground_height[:,0]
     heights = ground_height[:,1]
 
-    coefficients = np.polyfit(indices,heights,3)
+    coefficients = np.polyfit(indices,heights,deg)
     wave = np.poly1d(coefficients)
 
     interpolated_heights = torch.Tensor(wave(np.arange(0,motion_length)))
 
-    new_motion_root_translation[:,2] += interpolated_heights - motion_min_height
+    new_motion_root_translation[:,2] -= interpolated_heights
+    # new_motion_root_translation[:,2] += interpolated_heights-motion_min_height
 
     new_state = SkeletonState.from_rotation_and_root_translation(
         motion.skeleton_tree,
@@ -66,7 +71,6 @@ def height_adjustment(motion:SkeletonMotion, cal_interval=2, rate = 0.2):
 
 
 
-@torch.jit.script
 def rescale_motion_to_standard_size(motion_global_translation, standard_skeleton:SkeletonTree):
     rescaled_motion_global_translation = motion_global_translation.clone()
     for joint_idx,parent_idx in enumerate(standard_skeleton.parent_indices):
@@ -128,7 +132,7 @@ class MotionProcessManager:
             fps=motion.fps
         ),
         'fix_joints': lambda motion: fix_joints(motion, joint_indices=[18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32]),
-        'height_adjustment':lambda motion: height_adjustment(motion,kwargs.get('cal_interval',2),kwargs.get('rate',0.2))
+        'height_adjustment':lambda motion: height_adjustment(motion,kwargs.get('cal_interval',1.2),kwargs.get('rate',0.2))
     }
 
     def process_motion(self, motion,**kwargs):

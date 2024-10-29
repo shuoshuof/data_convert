@@ -73,22 +73,20 @@ def convert2isaac(data):
                                                                     torch.from_numpy(pose_quat_global),
                                                                     root_trans_offset, is_local=False)
 
-    new_global_rotation = new_sk_state.global_rotation
     new_root_translation = new_sk_state.root_translation
     new_local_rotation = new_sk_state.local_rotation
 
-    rotated_sk_state = SkeletonState.from_rotation_and_root_translation(new_sk_state.skeleton_tree,
+    converted = SkeletonState.from_rotation_and_root_translation(new_sk_state.skeleton_tree,
                                                                         new_local_rotation,
                                                                         new_root_translation,
                                                                         is_local=True)
 
-    pose_quat = rotated_sk_state.local_rotation
-    pose_quat_global = rotated_sk_state.global_rotation
-    root_trans_offset = rotated_sk_state.root_translation
-
+    pose_quat = converted.local_rotation
+    pose_quat_global = converted.global_rotation
+    root_trans_offset = converted.root_translation
 
     # bd_visualizer = BodyVisualizer("smpl24",static_frame=False)
-    # motion_global_translation = rotated_sk_state.global_translation[:,isaac_2_smpl,:]
+    # motion_global_translation = converted.global_translation[:,isaac_2_smpl,:]
     # for global_translation in motion_global_translation:
     #     bd_visualizer.step(global_translation)
 
@@ -102,4 +100,4 @@ def convert2isaac(data):
     new_motion_out['pose_aa'] = pose_aa
     new_motion_out['fps'] = fps
 
-    return new_motion_out
+    return new_motion_out,SkeletonMotion.from_skeleton_state(converted,fps=fps)

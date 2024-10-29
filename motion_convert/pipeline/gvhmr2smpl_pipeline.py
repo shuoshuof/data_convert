@@ -11,6 +11,7 @@ from poselib.poselib.core.rotation3d import quat_mul,quat_rotate
 
 from motion_convert.pipeline.base_pipeline import BasePipeline
 from motion_convert.format_convert.smpl2isaac import convert2isaac
+from motion_convert.utils.motion_process import MotionProcessManager
 
 class GVHMR2SMPLPipeline(BasePipeline):
     def __init__(self,motion_dir:str,save_dir:str,num_processes:int=None):
@@ -50,6 +51,8 @@ class GVHMR2SMPLPipeline(BasePipeline):
         return global_orient, transl
 
     def _process_data(self,data_chunk,results,process_idx,debug,**kwargs):
+        process_manager = MotionProcessManager()
+
         for path  in data_chunk:
             motion_data = torch.load(path)
             body_pose = motion_data['smpl_params_global']['body_pose']
@@ -66,10 +69,16 @@ class GVHMR2SMPLPipeline(BasePipeline):
                 'beta': torch.zeros(10),
                 'transl': transl,
                 'gender': 'neutral',
-                'fps': 20
+                'fps': kwargs.get('fps',20)
             }
 
-            data = convert2isaac(transformed_dict)
+            data,converted_motion = convert2isaac(transformed_dict)
+
+            result_motion = process_manager.process_motion(converted_motion,**kwargs)
+
+            data['pose_quat_global'] = result_motion.global_rotation
+            data['pose_quat'] = result_motion.local_rotation
+            data['root_trans_offset'] = result_motion.root_translation
 
             data_dict = {}
             file_name = os.path.basename(path).split('.')[0]
@@ -80,6 +89,6 @@ class GVHMR2SMPLPipeline(BasePipeline):
 
 
 if __name__ == '__main__':
-    pipeline = GVHMR2SMPLPipeline(motion_dir='motion_data/10_25/cam_out',
-                                  save_dir='motion_data/10_25/smpl', )
-    pipeline.run(debug=False)
+    pipeline = GVHMR2SMPLPipeline(motion_dir='motion_data/10_29/cam',
+                                  save_dir='motion_data/10_29/smpl', )
+    pipeline.run(debug=True,height_adjustment=True)

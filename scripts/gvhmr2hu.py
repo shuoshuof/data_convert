@@ -17,8 +17,8 @@ if __name__ == '__main__':
         debug=False,
         max_epoch=400,
         fix_root=False,
-        move_to_ground=True,
         filter=False,
-        clip_angle=True
+        clip_angle=True,
+        height_adjustment=True,
     )
 
