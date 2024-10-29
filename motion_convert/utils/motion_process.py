@@ -20,34 +20,53 @@ def move_feet_on_the_ground(motion):
         motion.skeleton_tree, motion.local_rotation, new_root_translation, is_local=True)
     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
 
-def cal_ground_height(motion:SkeletonMotion, cal_interval=2, rate = 0.2):
+def height_adjustment(motion:SkeletonMotion, cal_interval=2, rate = 0.2):
     # cal interval is in seconds
-
-    motion_min_height = torch.min(motion.global_translation[:,:,2])
+    motion_global_translation = motion.global_translation
+    # motion_global_translation = filter_data(motion_global_translation,alpha=0.95)
+    motion_min_height = torch.min(motion_global_translation[...,2].clone(),dim=1).values
     motion_length,_ = motion.root_translation.shape
     fps = motion.fps
-    win_length = cal_interval * fps
+    win_length = int(cal_interval * fps)
 
     new_motion_root_translation = motion.root_translation.clone()
 
-    ground_height = []
-    for motion_idx in range(0, len(motion.local_rotation), win_length):
-        motion_slice = motion.local_rotation[motion_idx:motion_idx+win_length]
-        min_z = torch.min(motion_slice[:,:,2],dim=1).values
+    half_win = win_length // 2
+    indices = torch.arange(half_win, motion_length - half_win, step=win_length // 2)
+    min_heights = []
+
+    for motion_idx in indices:
+        motion_slice = motion_global_translation[motion_idx-half_win:motion_idx+half_win, :, :].clone()
+        min_z = torch.min(motion_slice[:,:,2], dim=1).values
         sorted_z, indices = torch.sort(min_z)
-        ground_height.append([motion_idx,sorted_z[:int(rate*win_length)].mean()])
+        cal_num = max(int(rate * win_length), 1)
+        mean_index = (indices[:cal_num].float().mean() + motion_idx - half_win)
+        mean_height = sorted_z[:cal_num].mean()
+        min_heights.append((mean_index.item(), mean_height.item()))
 
-    indices = torch.Tensor(ground_height[:][0]).numpy()
-    height = torch.Tensor(ground_height[:][1]).numpy()
+    ground_height = np.array(min_heights)
+    indices = ground_height[:,0]
+    heights = ground_height[:,1]
 
-    motion_ground_height = np.arange(0,motion_length)
-    interp_func = interp1d(indices,height,fill_value="extrapolate")
-    interpolated_heights = torch.Tensor(interp_func(motion_ground_height))
+    coefficients = np.polyfit(indices,heights,3)
+    wave = np.poly1d(coefficients)
+
+    interpolated_heights = torch.Tensor(wave(np.arange(0,motion_length)))
+
+    new_motion_root_translation[:,2] += interpolated_heights - motion_min_height
+
+    new_state = SkeletonState.from_rotation_and_root_translation(
+        motion.skeleton_tree,
+        motion.global_rotation,
+        new_motion_root_translation,
+        is_local=False
+    )
+    new_motion = SkeletonMotion.from_skeleton_state(new_state,fps)
+    return new_motion
 
 
 
-
-# @torch.jit.script
+@torch.jit.script
 def rescale_motion_to_standard_size(motion_global_translation, standard_skeleton:SkeletonTree):
     rescaled_motion_global_translation = motion_global_translation.clone()
     for joint_idx,parent_idx in enumerate(standard_skeleton.parent_indices):
@@ -88,24 +107,28 @@ filter_dict = {'Weighted':WeightedFilter}
 
 def filter_data(data,filter_name:str='Weighted',**kwargs):
     filter = filter_dict[filter_name](**kwargs)
-    return [filter.filter(d) for d in data]
+    if isinstance(data,np.ndarray):
+        return np.stack([filter.filter(d) for d in data])
+    else:
+        return torch.stack([filter.filter(d) for d in data])
 
 
 class MotionProcessManager:
-    def __init__(self,):
+    def __init__(self,**kwargs):
         self.operations =  {
         'fix_root': fix_root,
         'move_to_ground': move_feet_on_the_ground,
         'filter': lambda motion: SkeletonMotion.from_skeleton_state(
             SkeletonState.from_rotation_and_root_translation(
                 motion.skeleton_tree,
-                torch.stack(filter_data(motion.local_rotation)),
+                filter_data(motion.local_rotation),
                 motion.global_translation[:, 0, :],
                 is_local=True
             ),
             fps=motion.fps
         ),
-        'fix_joints': lambda motion: fix_joints(motion, joint_indices=[18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32])
+        'fix_joints': lambda motion: fix_joints(motion, joint_indices=[18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32]),
+        'height_adjustment':lambda motion: height_adjustment(motion,kwargs.get('cal_interval',2),kwargs.get('rate',0.2))
     }
 
     def process_motion(self, motion,**kwargs):
