@@ -1,5 +1,3 @@
-from motion_convert.utils.transform3d import coord_transform
-
 from bvh import Bvh
 import numpy as np
 import pickle
