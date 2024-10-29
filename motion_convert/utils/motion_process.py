@@ -22,6 +22,8 @@ def move_feet_on_the_ground(motion):
 
 def height_adjustment(motion:SkeletonMotion, cal_interval=2, rate = 0.2):
     # cal interval is in seconds
+    # 消除高度漂移，但不会过滤跳跃
+
     motion_global_translation = motion.global_translation
     # motion_global_translation = filter_data(motion_global_translation,alpha=0.95)
     motion_min_height = torch.min(motion_global_translation[...,2].clone(),dim=1).values
@@ -53,7 +55,7 @@ def height_adjustment(motion:SkeletonMotion, cal_interval=2, rate = 0.2):
 
     interpolated_heights = torch.Tensor(wave(np.arange(0,motion_length)))
 
-    new_motion_root_translation[:,2] += interpolated_heights - motion_min_height
+    new_motion_root_translation[:,2] -= interpolated_heights
 
     new_state = SkeletonState.from_rotation_and_root_translation(
         motion.skeleton_tree,
@@ -66,7 +68,6 @@ def height_adjustment(motion:SkeletonMotion, cal_interval=2, rate = 0.2):
 
 
 
-@torch.jit.script
 def rescale_motion_to_standard_size(motion_global_translation, standard_skeleton:SkeletonTree):
     rescaled_motion_global_translation = motion_global_translation.clone()
     for joint_idx,parent_idx in enumerate(standard_skeleton.parent_indices):
