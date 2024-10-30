@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union,Tuple,Any
 import torch
 
 from poselib.poselib.skeleton.skeleton3d import SkeletonMotion,SkeletonState,SkeletonTree
@@ -14,7 +14,7 @@ class HuRetargetOptimizer(BaseRetargetOptimizer):
         self.forward_model = HuForwardModel(skeleton_tree=hu_sk_tree)
         self.clip_angle = clip_angle
         self.loss_fun = HuRetargetLossFun()
-    def train(self, motion_data:SkeletonMotion, max_epoch: int, lr: float,process_idx, **kwargs)->SkeletonMotion:
+    def train(self, motion_data:SkeletonMotion, max_epoch: int, lr: float,process_idx, **kwargs)->Tuple[SkeletonMotion,Any]:
         self.motion_local_rotation = motion_data.local_rotation.to(device=self.device)
         self.motion_length, self.joint_num, _ = self.motion_local_rotation.shape
         self.motion_root_translation = motion_data.root_translation.to(device=self.device)
@@ -31,7 +31,8 @@ class HuRetargetOptimizer(BaseRetargetOptimizer):
         )
         retargeted_skeleton_motion = SkeletonMotion.from_skeleton_state(retargeted_skeleton_state,fps=motion_data.fps)
 
-        return retargeted_skeleton_motion
+        max_retargeted_error = (motion_data.global_translation-retargeted_skeleton_motion.global_translation).abs().max()
+        return retargeted_skeleton_motion,round(float(max_retargeted_error),4)
 
     def _init_params(self,**kwargs):
         self.motion_joint_angles = torch.zeros(self.motion_length, self.joint_num-1, 1,

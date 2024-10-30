@@ -87,6 +87,8 @@ class GVHMR2SMPLPipeline(BasePipeline):
             with open(f'{self.save_dir}/{file_name}.pkl', 'wb') as f:
                 joblib.dump(data_dict,f)
 
+            results.append({})
+
 
 if __name__ == '__main__':
     pipeline = GVHMR2SMPLPipeline(motion_dir='motion_data/10_29/cam',

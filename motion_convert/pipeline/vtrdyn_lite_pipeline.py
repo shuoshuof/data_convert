@@ -17,12 +17,13 @@ from poselib.poselib.visualization.common import plot_skeleton_H
 from motion_convert.pipeline.base_pipeline import BasePipeline
 from motion_convert.utils.transform3d import *
 from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
-from motion_convert.utils.motion_process import  rescale_motion_to_standard_size, MotionProcessManager
+from motion_convert.utils.motion_process import MotionProcessManager,rescale_motion_to_standard_size,get_mirror_motion
 
 from motion_convert.robot_config.Hu import VTRDYN_LITE2HU_JOINT_MAPPING,hu_graph
 from motion_convert.robot_config.VTRDYN import vtrdyn_lite_graph,VTRDYN_CONNECTIONS_LITE,VTRDYN_JOINT_NAMES_LITE
 
-# from scripts.process_vtrdyn_mocap import *
+from motion_convert.format_convert.convert import motion2isaac
+
 def get_motion_translation(data):
     motion_length = len(data)
     motion_global_translation = np.zeros((motion_length, len(VTRDYN_JOINT_NAMES_LITE), 3))
@@ -31,7 +32,8 @@ def get_motion_translation(data):
         motion_global_translation[:, joint_idx, 1] = data[f'{joint_name} position Y(m)']
         motion_global_translation[:, joint_idx, 2] = data[f'{joint_name} position Z(m)']
     return motion_global_translation
-class ConvertVtrdynPipeline(BasePipeline):
+
+class ConvertVtrdynLitePipeline(BasePipeline):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.vtrdyn_zero_pose,self.hu_zero_pose,self.hu_skeleton_tree = self._load_asset()
@@ -88,14 +90,14 @@ class ConvertVtrdynPipeline(BasePipeline):
         )
         rebuilt_motion = SkeletonMotion.from_skeleton_state(rebuilt_skeleton_state,fps=fps)
 
-        rebuild_error = torch.abs(rebuilt_motion.global_translation-motion_global_translation).max()
-        print(f"Rebuild error :{rebuild_error:.5f}")
+        rebuilt_error = torch.abs(rebuilt_motion.global_translation-motion_global_translation).max()
+        # print(f"Rebuild error :{rebuild_error:.5f}")
 
-        return rebuilt_motion
+        return rebuilt_motion,round(float(rebuilt_error),4)
 
 
     def _process_data(self,data_chunk,results,process_idx,debug,**kwargs):
-        hu_retarget_optimizer = HuRetargetOptimizer(self.hu_skeleton_tree)
+        hu_retarget_optimizer = HuRetargetOptimizer(self.hu_skeleton_tree,kwargs.get('clip_angle',True))
         process_manager = MotionProcessManager()
         for path  in data_chunk:
             file_name = os.path.basename(path).split('.')[0]
@@ -107,7 +109,7 @@ class ConvertVtrdynPipeline(BasePipeline):
             motion_global_translation = rescale_motion_to_standard_size(motion_global_translation, self.vtrdyn_zero_pose.skeleton_tree)
             # vis_vtrdyn(motion_global_translation)
             fps = kwargs.get('fps', 30)
-            rebuilt_motion = self._rebuild_with_vtrdyn_lite_zero_pose(motion_global_translation,fps)
+            rebuilt_motion,rebuilt_error = self._rebuild_with_vtrdyn_lite_zero_pose(motion_global_translation,fps)
 
             # vis_vtrdyn(rebuilt_motion.global_translation)
 
@@ -122,32 +124,35 @@ class ConvertVtrdynPipeline(BasePipeline):
 
             max_epoch = kwargs.get('max_epoch',500)
             lr = kwargs.get('lr',1e-1)
-            retargeted_motion = hu_retarget_optimizer.train(
+            retargeted_motion,retargeted_error = hu_retarget_optimizer.train(
                 motion_data=target_motion,
                 max_epoch=max_epoch,
                 lr=lr,
                 process_idx=process_idx
             )
-            vis_hu(retargeted_motion.global_translation)
+            # vis_hu(retargeted_motion.global_translation)
             # plot_skeleton_H([rebuilt_motion,target_motion,retargeted_motion])
             result_motion = process_manager.process_motion(retargeted_motion, **kwargs)
+            # vis_hu(retargeted_motion.global_translation)
 
+            motion_list = []
+            motion_list.append([file_name,result_motion])
+            if kwargs.get('generate_mirror', False):
+                motion_list.append([file_name+'_mirror',get_mirror_motion(result_motion)])
 
-            motion_dict = {}
-            motion_dict['pose_quat_global'] = result_motion.global_rotation.numpy()
-            motion_dict['pose_quat'] = result_motion.local_rotation.numpy()
-            motion_dict['trans_orig'] = None
-            motion_dict['root_trans_offset'] = result_motion.root_translation.numpy()
-            motion_dict['target'] = "hu"
-            motion_dict['pose_aa'] = None
-            motion_dict['fps'] = result_motion.fps
-            motion_dict['project_loss'] = 1e-5
+            motion_save_dir = self.save_dir+'_motion'
+            os.makedirs(motion_save_dir,exist_ok=True)
+            for name, motion in motion_list:
+                motion_dict = motion2isaac(motion)
+                save_dict  = {name:motion_dict}
+                with open(f'{self.save_dir}/{name}.pkl', 'wb') as f:
+                    joblib.dump(save_dict,f)
+                with open(f'{motion_save_dir}/{name}_motion.pkl', 'wb') as f:
+                    joblib.dump(motion,f)
 
-            save_dict  = {file_name:motion_dict}
-            with open(f'{self.save_dir}/{file_name}.pkl', 'wb') as f:
-                joblib.dump(save_dict,f)
-            with open(f'{self.save_dir}/{file_name}_motion.pkl', 'wb') as f:
-                joblib.dump(result_motion,f)
+            info = {'file_name':file_name,'rebuilt_error':rebuilt_error,'retargeted_error':retargeted_error}
+
+            results.append(info)
 
 
 def vis_vtrdyn(motion_global_translation):
@@ -162,6 +167,15 @@ def vis_hu(motion_global_translation):
         bd_vis.step(global_trans)
 
 if __name__ == '__main__':
-    vtrdyn_pipeline = ConvertVtrdynPipeline(motion_dir='motion_data/10_28/mocap',
-                                            save_dir='motion_data/10_28/hu',)
-    vtrdyn_pipeline.run(debug=False,max_epoch=400,filter=False,fix_joints=True)
+    vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/10_29_vtrdyn_mocap/mocap',
+                                                     save_dir='motion_data/10_29_vtrdyn_mocap/hu', )
+    vtrdyn_lite_pipeline.run(
+        debug=False,
+        max_epoch=500,
+        filter=True,
+        fix_joints=True,
+        clip_angle=True,
+        height_adjustment=True,
+        generate_mirror=True,
+        save_info=True,
+    )

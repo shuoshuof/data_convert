@@ -1,26 +1,30 @@
 import copy
 import os
-from tqdm import tqdm
-import math
+import pandas as pd
 import torch
-from abc import ABC, abstractmethod
 from typing import Optional, Union
 import joblib
-import numpy as np
 import pickle
-import pandas as pd
 
 from body_visualizer.visualizer import BodyVisualizer
 
-
 from motion_convert.pipeline.base_pipeline import BasePipeline
-from motion_convert.retarget_optimizer.noitom_retarget_optimizer import NoitomRetargetOptimizer
 from motion_convert.utils.transform3d import *
 from motion_convert.robot_config.Hu import NOITOM2HU_JOINT_MAPPING,hu_graph
+from motion_convert.robot_config.NOITOM import NOITOM_JOINT_NAMES,noitom_graph
 from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
-from motion_convert.utils.motion_process import  rescale_motion_to_standard_size, MotionProcessManager
+from motion_convert.utils.motion_process import MotionProcessManager,rescale_motion_to_standard_size,get_mirror_motion
+from motion_convert.format_convert.convert import motion2isaac
 
-from scripts.process_noitom_mocap import *
+
+def get_motion_translation(data):
+    motion_length = len(data)
+    motion_global_translation = np.zeros((motion_length, len(NOITOM_JOINT_NAMES), 3))
+    for joint_idx, joint_name in enumerate(NOITOM_JOINT_NAMES):
+        motion_global_translation[:, joint_idx, 0] = data[f'{joint_name}-Joint-Posi-x']
+        motion_global_translation[:, joint_idx, 1] = data[f'{joint_name}-Joint-Posi-y']
+        motion_global_translation[:, joint_idx, 2] = data[f'{joint_name}-Joint-Posi-z']
+    return motion_global_translation
 
 class ConvertNoitomPipeline(BasePipeline):
     def __init__(self, *args, **kwargs) -> None:
@@ -54,10 +58,7 @@ class ConvertNoitomPipeline(BasePipeline):
             zero_pose_local_translation[:,[4,1,7]],
             motion_global_translation[:,[4,1,7]]-motion_global_translation[:,[0]]
         )
-        # joint8_quat = cal_joint_quat(
-        #     zero_pose_local_translation[:,[9,17,13]],
-        #     motion_global_translation[:,[9,17,13]]-motion_global_translation[:,[8]]
-        # )
+
         joint8_quat = cal_joint_quat(
             zero_pose_local_translation[:,[17,13,9]],
             motion_global_translation[:,[17,13,9]]-motion_global_translation[:,[8]]
@@ -81,10 +82,10 @@ class ConvertNoitomPipeline(BasePipeline):
         )
         rebuilt_motion = SkeletonMotion.from_skeleton_state(rebuilt_skeleton_state,fps=fps)
 
-        rebuild_error = torch.abs(rebuilt_motion.global_translation-motion_global_translation).max()
-        print(f"Rebuild error :{rebuild_error:.5f}")
+        rebuilt_error = torch.abs(rebuilt_motion.global_translation-motion_global_translation).max()
+        # print(f"Rebuild error :{rebuilt_error:.5f}")
 
-        return rebuilt_motion
+        return rebuilt_motion,round(float(rebuilt_error),4)
 
 
 
@@ -101,7 +102,7 @@ class ConvertNoitomPipeline(BasePipeline):
             motion_global_translation = rescale_motion_to_standard_size(motion_global_translation,self.noitom_zero_pose.skeleton_tree)
             # vis_noitom(motion_global_translation)
             fps = kwargs.get('fps', 30)
-            rebuilt_motion = self._rebuild_with_noitom_zero_pose(motion_global_translation,fps)
+            rebuilt_motion,rebuilt_error = self._rebuild_with_noitom_zero_pose(motion_global_translation,fps)
 
             # vis_noitom(rebuilt_motion.global_translation)
 
@@ -116,31 +117,34 @@ class ConvertNoitomPipeline(BasePipeline):
             # plot_skeleton_H([target_motion])
             max_epoch = kwargs.get('max_epoch',500)
             lr = kwargs.get('lr',1e-1)
-            retargeted_motion = hu_retarget_optimizer.train(
+            retargeted_motion,retargeted_error= hu_retarget_optimizer.train(
                 motion_data=target_motion,
                 max_epoch=max_epoch,
                 lr=lr,
                 process_idx=process_idx
             )
-            vis_hu(retargeted_motion.global_translation)
+            # vis_hu(retargeted_motion.global_translation)
             result_motion = process_manager.process_motion(retargeted_motion, **kwargs)
 
 
-            motion_dict = {}
-            motion_dict['pose_quat_global'] = result_motion.global_rotation.numpy()
-            motion_dict['pose_quat'] = result_motion.local_rotation.numpy()
-            motion_dict['trans_orig'] = None
-            motion_dict['root_trans_offset'] = result_motion.root_translation.numpy()
-            motion_dict['target'] = "hu"
-            motion_dict['pose_aa'] = None
-            motion_dict['fps'] = result_motion.fps
-            motion_dict['project_loss'] = 1e-5
+            motion_list = []
+            motion_list.append([file_name,result_motion])
+            if kwargs.get('generate_mirror', False):
+                motion_list.append([file_name+'_mirror',get_mirror_motion(result_motion)])
 
-            save_dict  = {file_name:motion_dict}
-            with open(f'{self.save_dir}/{file_name}.pkl', 'wb') as f:
-                joblib.dump(save_dict,f)
-            with open(f'{self.save_dir}/{file_name}_motion.pkl', 'wb') as f:
-                joblib.dump(result_motion,f)
+            motion_save_dir = self.save_dir+'_motion'
+            os.makedirs(motion_save_dir,exist_ok=True)
+            for name, motion in motion_list:
+                motion_dict = motion2isaac(motion)
+                save_dict  = {name:motion_dict}
+                with open(f'{self.save_dir}/{name}.pkl', 'wb') as f:
+                    joblib.dump(save_dict,f)
+                with open(f'{motion_save_dir}/{name}_motion.pkl', 'wb') as f:
+                    joblib.dump(motion,f)
+
+            info = {'file_name':file_name,'rebuilt_error':rebuilt_error,'retargeted_error':retargeted_error}
+
+            results.append(info)
 
 
 def vis_noitom(motion_global_translation):
@@ -157,4 +161,9 @@ def vis_hu(motion_global_translation):
 if __name__ == '__main__':
     noitom_pipeline = ConvertNoitomPipeline(motion_dir='test_data/moitom_mocap',
                                             save_dir='motion_data/10_24_noitom_mocap_data',)
-    noitom_pipeline.run(debug=False,max_epoch=400,filter=False,fix_joints=True)
+    noitom_pipeline.run(
+        debug=False,
+        max_epoch=400,
+        filter=False,
+        fix_joints=True
+    )

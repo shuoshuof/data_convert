@@ -1,12 +1,13 @@
 import os
-
+import pickle
 from tqdm import tqdm
 import torch
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 import multiprocessing
 import numpy as np
-
+from tqdm import tqdm
+import pandas as pd
 class BasePipeline(ABC):
     def __init__(self,motion_dir:str,save_dir:str,num_processes:int=None):
         self.num_processes = multiprocessing.cpu_count() if num_processes is None else num_processes
@@ -21,13 +22,22 @@ class BasePipeline(ABC):
     @abstractmethod
     def _process_data(self,data_chunk,results,process_idx,debug,**kwargs):
         pass
+    def _update_pbar(self,results,num_data):
+        with tqdm(total=num_data) as pbar:
+            while True:
+                percent = len(results)
+                pbar.n = percent
+                pbar.refresh()
+                if len(results) == num_data:
+                    break
+
     def run(self,debug=False,**kwargs):
         data = self._read_data(**kwargs)
 
         data_chunks = self._split_data(data,**kwargs)
 
         manager = multiprocessing.Manager()
-        results = manager.list([None]*self.num_processes)
+        results = manager.list([])
 
         os.makedirs(self.save_dir,exist_ok=True)
 
@@ -41,11 +51,20 @@ class BasePipeline(ABC):
                                             kwargs=kwargs)
                 processes.append(p)
                 p.start()
+            # pbar process
+            pbar_process = multiprocessing.Process(target=self._update_pbar,args=(results,len(data)))
+            processes.append(pbar_process)
+            pbar_process.start()
 
             for p in processes:
                 p.join()
 
+        results = pd.DataFrame(list(results))
+        print(results)
+        if kwargs.get('save_info',False):
+            results.to_csv(os.path.join(self.save_dir,'results.csv'),index=False)
         print("all processes done")
 
+        return results
 
 

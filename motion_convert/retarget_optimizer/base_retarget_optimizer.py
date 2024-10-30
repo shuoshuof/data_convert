@@ -17,20 +17,26 @@ class BaseRetargetOptimizer(ABC):
         self.optimizer = self._set_optimizer(lr, **kwargs)
         self.lr_scheduler = self._set_lr_scheduler()
 
-        with tqdm(total=max_epoch) as pbar:
-            for epoch in range(max_epoch):
-                self.optimizer.zero_grad()
-                model_output = self._model_forward(**self.params)
-                loss = self._cal_loss(model_output,motion_data)
+        # with tqdm(total=max_epoch) as pbar:
+        #     for epoch in range(max_epoch):
+        #         self.optimizer.zero_grad()
+        #         model_output = self._model_forward(**self.params)
+        #         loss = self._cal_loss(model_output,motion_data)
+        #
+        #         self.train_step(loss)
+        #
+        #         pbar.set_description(f'Epoch {epoch + 1}/{max_epoch}')
+        #         pbar.set_postfix(
+        #             loss=loss.item(),
+        #             lr=self.lr_scheduler.get_last_lr() if self.lr_scheduler else lr
+        #         )
+        #         pbar.update(1)
+        for epoch in range(max_epoch):
+            self.optimizer.zero_grad()
+            model_output = self._model_forward(**self.params)
+            loss = self._cal_loss(model_output,motion_data)
 
-                self.train_step(loss)
-
-                pbar.set_description(f'Epoch {epoch + 1}/{max_epoch}')
-                pbar.set_postfix(
-                    loss=loss.item(),
-                    lr=self.lr_scheduler.get_last_lr() if self.lr_scheduler else lr
-                )
-                pbar.update(1)
+            self.train_step(loss)
 
     def train_step(self, loss):
         loss.backward()

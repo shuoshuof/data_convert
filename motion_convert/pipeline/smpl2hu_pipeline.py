@@ -9,6 +9,7 @@ from motion_convert.utils.transform3d import *
 from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
 from motion_convert.utils.motion_process import *
 from motion_convert.robot_config.Hu import *
+from motion_convert.format_convert.convert import motion2isaac
 
 class SMPL2HuPipeline(BasePipeline):
     def __init__(self, motion_dir: str, save_dir: str, num_processes: int = None):
@@ -29,7 +30,7 @@ class SMPL2HuPipeline(BasePipeline):
             smpl_skeleton_tree = pickle.load(f)
         hu_skeleton_tree = hu_zero_pose.skeleton_tree
         return smpl_t_pose,hu_zero_pose,smpl_skeleton_tree,hu_skeleton_tree
-    def _rebuild_with_smpl_t_pose(self,motion:SkeletonMotion)->SkeletonMotion:
+    def _rebuild_with_smpl_t_pose(self,motion:SkeletonMotion):
         motion_fps = motion.fps
 
         motion_global_translation = motion.global_translation
@@ -54,10 +55,10 @@ class SMPL2HuPipeline(BasePipeline):
         )
         new_motion = SkeletonMotion.from_skeleton_state(new_skeleton_state,fps=motion_fps)
 
-        rebuild_error = torch.abs(new_motion.global_translation-motion_global_translation).max()
-        print(f"Rebuild error :{rebuild_error:.5f}")
+        rebuilt_error = torch.abs(new_motion.global_translation-motion_global_translation).max()
+        # print(f"Rebuild error :{rebuild_error:.5f}")
 
-        return new_motion
+        return new_motion,round(float(rebuilt_error),4)
 
 
     def _process_data(self,data_chunk,results,process_idx,debug,**kwargs):
@@ -84,7 +85,7 @@ class SMPL2HuPipeline(BasePipeline):
 
             smpl_motion = SkeletonMotion.from_skeleton_state(smpl_motion,fps=motion_fps)
             # TODO： 腰部旋转很可能有问题
-            rebuilt_motion = self._rebuild_with_smpl_t_pose(smpl_motion)
+            rebuilt_motion,rebuilt_error = self._rebuild_with_smpl_t_pose(smpl_motion)
 
             target_motion = copy.deepcopy(rebuilt_motion).retarget_to_by_tpose(
                 joint_mapping=SMPL2HU_JOINT_MAPPING,
@@ -96,7 +97,7 @@ class SMPL2HuPipeline(BasePipeline):
 
             max_epoch = kwargs.get('max_epoch',500)
             lr = kwargs.get('lr',1e-1)
-            retargeted_motion = hu_retarget_optimizer.train(
+            retargeted_motion,retargeted_error = hu_retarget_optimizer.train(
                 motion_data=target_motion,
                 max_epoch=max_epoch,
                 lr=lr,
@@ -105,23 +106,24 @@ class SMPL2HuPipeline(BasePipeline):
 
             result_motion = process_manager.process_motion(retargeted_motion,**kwargs)
 
-            motion_dict = {}
-            motion_dict['pose_quat_global'] = result_motion.global_rotation.numpy()
-            motion_dict['pose_quat'] = result_motion.local_rotation.numpy()
-            motion_dict['trans_orig'] = None
-            motion_dict['root_trans_offset'] = result_motion.root_translation.numpy()
-            motion_dict['target'] = "hu"
-            motion_dict['pose_aa'] = None
-            motion_dict['fps'] = motion_fps
-            motion_dict['project_loss'] = 1e-5
+            motion_list = []
+            motion_list.append([file_name,result_motion])
+            if kwargs.get('generate_mirror', False):
+                motion_list.append([file_name+'_mirror',get_mirror_motion(result_motion)])
 
-            save_dict  = {file_name:motion_dict}
-            with open(f'{self.save_dir}/{file_name}.pkl', 'wb') as f:
-                joblib.dump(save_dict,f)
-            with open(f'{self.save_dir}/{file_name}_motion.pkl', 'wb') as f:
-                joblib.dump(result_motion,f)
+            motion_save_dir = self.save_dir+'_motion'
+            os.makedirs(motion_save_dir,exist_ok=True)
+            for name, motion in motion_list:
+                motion_dict = motion2isaac(motion)
+                save_dict  = {name:motion_dict}
+                with open(f'{self.save_dir}/{name}.pkl', 'wb') as f:
+                    joblib.dump(save_dict,f)
+                with open(f'{motion_save_dir}/{name}_motion.pkl', 'wb') as f:
+                    joblib.dump(motion,f)
 
-            # plot_skeleton_H([target_motion,result_motion])
+            info = {'file_name':file_name,'rebuilt_error':rebuilt_error,'retargeted_error':retargeted_error}
+
+            results.append(info)
 
 if __name__ == '__main__':
 
@@ -135,4 +137,6 @@ if __name__ == '__main__':
         filter=False,
         clip_angle=True,
         height_adjustment=True,
+        generate_mirror=True,
+        save_info=True
     )
