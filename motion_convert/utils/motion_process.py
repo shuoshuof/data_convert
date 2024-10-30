@@ -23,7 +23,7 @@ def move_feet_on_the_ground(motion):
 
 def height_adjustment(motion:SkeletonMotion, cal_interval=1.2, rate = 0.2,deg=4):
     # cal interval is in seconds
-    # 消除高度漂移，但不会过滤跳跃,乔丹滞空最多为1.2s，以此为极限
+    # 消除高度漂移，但不会过滤跳跃,乔丹滞空最多为1.2s，cal_interval以此为极限
 
     motion_global_translation = motion.global_translation
     # motion_global_translation = filter_data(motion_global_translation,alpha=0.95)
@@ -69,8 +69,6 @@ def height_adjustment(motion:SkeletonMotion, cal_interval=1.2, rate = 0.2,deg=4)
     new_motion = SkeletonMotion.from_skeleton_state(new_state,fps)
     return new_motion
 
-
-
 def rescale_motion_to_standard_size(motion_global_translation, standard_skeleton:SkeletonTree):
     rescaled_motion_global_translation = motion_global_translation.clone()
     for joint_idx,parent_idx in enumerate(standard_skeleton.parent_indices):
@@ -92,6 +90,24 @@ def fix_joints(motion:SkeletonMotion, joint_indices:list):
         motion.skeleton_tree, new_local_rotation, new_root_translation, is_local=True)
     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
 
+def get_mirror_motion(motion:SkeletonMotion):
+    # xoz对称
+    mirror_motion_global_rotation = motion.global_rotation.clone()
+    mirror_motion_global_rotation[..., 0] = -mirror_motion_global_rotation[..., 0]
+    mirror_motion_global_rotation[..., 2] = -mirror_motion_global_rotation[..., 2]
+    mirror_indices = [0, 7,8,9,10,11,12, 1,2,3,4,5,6, 13, 23,24,25,26,27,28,29,30,31, 14,15,16,17,18,19,20,21,22, 32]
+    mirror_motion_global_rotation = mirror_motion_global_rotation[:,mirror_indices,:]
+
+    mirror_motion_root_translation = motion.root_translation.clone()
+    mirror_motion_root_translation[..., 1] = -mirror_motion_root_translation[..., 1]
+
+    mirror_state = SkeletonState.from_rotation_and_root_translation(
+        motion.skeleton_tree,
+        mirror_motion_global_rotation,
+        mirror_motion_root_translation,
+        is_local=False
+    )
+    return SkeletonMotion.from_skeleton_state(mirror_state,motion.fps)
 
 
 class WeightedFilter:
