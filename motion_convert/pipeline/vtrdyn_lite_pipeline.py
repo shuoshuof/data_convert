@@ -98,7 +98,7 @@ class ConvertVtrdynLitePipeline(BasePipeline):
 
     def _process_data(self,data_chunk,results,process_idx,debug,**kwargs):
         hu_retarget_optimizer = HuRetargetOptimizer(self.hu_skeleton_tree,kwargs.get('clip_angle',True))
-        process_manager = MotionProcessManager()
+        process_manager = MotionProcessManager(**kwargs)
         for path  in data_chunk:
             file_name = os.path.basename(path).split('.')[0]
             mocap_data = pd.read_csv(path)
@@ -167,15 +167,18 @@ def vis_hu(motion_global_translation):
         bd_vis.step(global_trans)
 
 if __name__ == '__main__':
-    vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/10_29_vtrdyn_mocap/mocap',
-                                                     save_dir='motion_data/10_29_vtrdyn_mocap/hu', )
+    vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/10_31_stand_up/mocap',
+                                                     save_dir='motion_data/10_31_stand_up/hu1', )
     vtrdyn_lite_pipeline.run(
         debug=False,
         max_epoch=500,
         filter=True,
         fix_joints=True,
+        joint_indices=[i for i in range(13,33)],
+        fix_root=True,
         clip_angle=True,
         height_adjustment=True,
+        move_to_ground=False,
         generate_mirror=True,
         save_info=True,
     )

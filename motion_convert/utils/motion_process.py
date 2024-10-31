@@ -7,13 +7,22 @@ from poselib.poselib.skeleton.skeleton3d import SkeletonMotion,SkeletonState,Ske
 
 def fix_root(motion:SkeletonMotion):
     new_root_translation = motion.root_translation.clone()
-    new_root_translation[:,0] = 0
+    new_root_translation -= motion.root_translation[0]
     new_state = SkeletonState.from_rotation_and_root_translation(
         motion.skeleton_tree, motion.local_rotation, new_root_translation, is_local=True)
     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
 
-def move_feet_on_the_ground(motion):
-    min_h = torch.min(motion.root_translation[:, 2])
+# def move_feet_on_the_ground(motion):
+#     min_h = torch.min(motion.root_translation[:, 2])
+#     new_root_translation = motion.root_translation.clone()
+#     new_root_translation[:, 2] -= min_h
+#
+#     new_state = SkeletonState.from_rotation_and_root_translation(
+#         motion.skeleton_tree, motion.local_rotation, new_root_translation, is_local=True)
+#     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
+
+def move_feet_on_the_ground(motion:SkeletonMotion):
+    min_h = torch.min(motion.global_translation[...,2].clone(),dim=1).values
     new_root_translation = motion.root_translation.clone()
     new_root_translation[:, 2] -= min_h
 
@@ -21,10 +30,10 @@ def move_feet_on_the_ground(motion):
         motion.skeleton_tree, motion.local_rotation, new_root_translation, is_local=True)
     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
 
-def height_adjustment(motion:SkeletonMotion, cal_interval=1.2, rate = 0.2,deg=4):
+def height_adjustment(motion:SkeletonMotion, cal_interval=1.2, rate = 0.2,deg=3):
     # cal interval is in seconds
     # 消除高度漂移，但不会过滤跳跃,乔丹滞空最多为1.2s，cal_interval以此为极限
-
+    # TODO: 根据motion的方差来设置deg
     motion_global_translation = motion.global_translation
     # motion_global_translation = filter_data(motion_global_translation,alpha=0.95)
     motion_min_height = torch.min(motion_global_translation[...,2].clone(),dim=1).values
@@ -135,9 +144,9 @@ def filter_data(data,filter_name:str='Weighted',**kwargs):
 
 class MotionProcessManager:
     def __init__(self,**kwargs):
+        # height_adjustment and move_to_ground should in the last two
         self.operations =  {
         'fix_root': fix_root,
-        'move_to_ground': move_feet_on_the_ground,
         'filter': lambda motion: SkeletonMotion.from_skeleton_state(
             SkeletonState.from_rotation_and_root_translation(
                 motion.skeleton_tree,
@@ -147,8 +156,9 @@ class MotionProcessManager:
             ),
             fps=motion.fps
         ),
-        'fix_joints': lambda motion: fix_joints(motion, joint_indices=[18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32]),
-        'height_adjustment':lambda motion: height_adjustment(motion,kwargs.get('cal_interval',1.2),kwargs.get('rate',0.2))
+        'fix_joints': lambda motion: fix_joints(motion, joint_indices=kwargs.get('joint_indices',[18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32])),
+        'height_adjustment':lambda motion: height_adjustment(motion,kwargs.get('cal_interval',1.2),kwargs.get('rate',0.2)),
+        'move_to_ground': move_feet_on_the_ground,
     }
 
     def process_motion(self, motion,**kwargs):
