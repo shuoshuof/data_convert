@@ -132,11 +132,14 @@ if __name__ == '__main__':
     smpl2hu_pipeline.run(
         debug=False,
         max_epoch=400,
-        fix_root=False,
-        move_to_ground=False,
-        filter=False,
+        filter=True,
+        fix_joints=True,
+        joint_indices=[i for i in range(13,33)],
+        fix_ankles=True,
+        fix_root=True,
         clip_angle=True,
-        height_adjustment=True,
+        height_adjustment=False,
+        move_to_ground=True,
         generate_mirror=True,
-        save_info=True
+        save_info=True,
     )

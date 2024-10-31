@@ -97,6 +97,17 @@ def fix_joints(motion:SkeletonMotion, joint_indices:list):
     new_local_rotation[:, joint_indices] = torch.Tensor([[[0,0,0,1]]]).repeat(motion_length,len(joint_indices),1)
     new_state = SkeletonState.from_rotation_and_root_translation(
         motion.skeleton_tree, new_local_rotation, new_root_translation, is_local=True)
+
+    return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
+
+def fix_ankles(motion:SkeletonMotion):
+    ankle_indices = [5,6,11,12]
+    motion_length,_,_ = motion.global_rotation.shape
+    new_root_translation = motion.root_translation.clone()
+    new_global_rotation = motion.global_rotation.clone()
+    new_global_rotation[:, ankle_indices] = torch.Tensor([[[0,0,0,1]]]).repeat(motion_length,len(ankle_indices),1)
+    new_state = SkeletonState.from_rotation_and_root_translation(
+        motion.skeleton_tree, new_global_rotation, new_root_translation, is_local=False)
     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
 
 def get_mirror_motion(motion:SkeletonMotion):
@@ -157,6 +168,7 @@ class MotionProcessManager:
             fps=motion.fps
         ),
         'fix_joints': lambda motion: fix_joints(motion, joint_indices=kwargs.get('joint_indices',[18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32])),
+        'fix_ankles': fix_ankles,
         'height_adjustment':lambda motion: height_adjustment(motion,kwargs.get('cal_interval',1.2),kwargs.get('rate',0.2)),
         'move_to_ground': move_feet_on_the_ground,
     }

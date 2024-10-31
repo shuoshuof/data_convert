@@ -168,17 +168,18 @@ def vis_hu(motion_global_translation):
 
 if __name__ == '__main__':
     vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/10_31_stand_up/mocap',
-                                                     save_dir='motion_data/10_31_stand_up/hu1', )
+                                                     save_dir='motion_data/10_31_stand_up/hu', )
     vtrdyn_lite_pipeline.run(
         debug=False,
         max_epoch=500,
         filter=True,
         fix_joints=True,
         joint_indices=[i for i in range(13,33)],
+        fix_ankles=True,
         fix_root=True,
         clip_angle=True,
-        height_adjustment=True,
-        move_to_ground=False,
+        height_adjustment=False,
+        move_to_ground=True,
         generate_mirror=True,
         save_info=True,
     )
