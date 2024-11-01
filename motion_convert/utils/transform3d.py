@@ -4,6 +4,8 @@ from poselib.poselib.core.rotation3d import *
 from poselib.poselib.skeleton.skeleton3d import SkeletonMotion,SkeletonState,SkeletonTree
 from typing import Dict
 import copy
+from scipy.spatial.transform import Rotation as sRot
+
 @torch.jit.script
 def quat_between_two_vecs(vec1, vec2):
     '''calculate a quaternion that rotates from vector v1 to vector v2'''
@@ -26,6 +28,7 @@ def coord_transform(p,order:list=None,dir=None):
     if dir is not None:
         p = p* dir
     return p
+
 @torch.jit.script
 def cal_joint_quat(standard_pose_local_translation, motion_local_translation):
     # https://igl.ethz.ch/projects/ARAP/svd_rot.pdf
@@ -41,6 +44,21 @@ def cal_joint_quat(standard_pose_local_translation, motion_local_translation):
     # quats = rotation.as_quat()
     quats = quat_from_rotation_matrix(R_matrix)
     return quats
+
+def quat_in_xyz_axis(q):
+    r = sRot.from_quat(q)
+    euler_angles = r.as_euler('xyz', degrees=False)
+    quat_x = sRot.from_euler('x', euler_angles[...,0], degrees=False).as_quat()
+    quat_y = sRot.from_euler('y', euler_angles[...,1], degrees=False).as_quat()
+    quat_z = sRot.from_euler('z', euler_angles[...,2], degrees=False).as_quat()
+
+    return torch.Tensor(quat_x), torch.Tensor(quat_y), torch.Tensor(quat_z)
+
+@torch.jit.script
+def exp_map_to_quat(exp_map):
+    angle, axis = exp_map_to_angle_axis(exp_map)
+    q = quat_from_angle_axis(angle, axis)
+    return q
 
 def retarget_to_by_tpose(
         skeleton_state,

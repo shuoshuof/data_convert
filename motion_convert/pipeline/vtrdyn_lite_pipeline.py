@@ -131,6 +131,7 @@ class ConvertVtrdynLitePipeline(BasePipeline):
                 process_idx=process_idx
             )
             # vis_hu(retargeted_motion.global_translation)
+            # vis_new_hu(retargeted_motion)
             # plot_skeleton_H([rebuilt_motion,target_motion,retargeted_motion])
             result_motion = process_manager.process_motion(retargeted_motion, **kwargs)
             # vis_hu(retargeted_motion.global_translation)
@@ -165,10 +166,25 @@ def vis_hu(motion_global_translation):
     motion_global_translation = motion_global_translation.reshape(-1,33,3)
     for global_trans in motion_global_translation:
         bd_vis.step(global_trans)
+def vis_new_hu(motion:SkeletonMotion):
+    with open('asset/zero_pose/new_hu_zero_pose.pkl','rb') as f:
+        new_zero_pose:SkeletonState = pickle.load(f)
+    new_local_rotation = motion.local_rotation.clone()
+    motion_length =new_local_rotation.shape[0]
+    new_local_rotation[:,[5,6,11,12],:] = torch.Tensor([[[0,0,0,1]]]).repeat(motion_length,4,1)
+    new_sk_state = SkeletonState.from_rotation_and_root_translation(
+        new_zero_pose.skeleton_tree,
+        new_local_rotation,
+        motion.root_translation,
+        is_local=True
+    )
+    from body_visualizer.common import vis_motion
+    new_motion = SkeletonMotion.from_skeleton_state(new_sk_state,fps=motion.fps)
+    vis_motion(new_motion,graph='hu',static_frame=False)
 
 if __name__ == '__main__':
-    vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/10_31_stand_up/mocap',
-                                                     save_dir='motion_data/10_31_stand_up/hu', )
+    vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/10_29_vtrdyn_mocap/mocap',
+                                                     save_dir='motion_data/10_29_vtrdyn_mocap/hu')
     vtrdyn_lite_pipeline.run(
         debug=False,
         max_epoch=500,

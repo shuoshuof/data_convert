@@ -46,12 +46,16 @@ if __name__ == '__main__':
 
     motion_joint_angles[:,2,:] = -1.5708
     motion_joint_angles[:,8,:] = -1.5708
+    motion_joint_angles[:,3,:] = 1.5708
+    motion_joint_angles[:,9,:] = 1.5708
+    motion_joint_angles[:,12,:] = 1.5708
 
     motion_root_translation = torch.zeros(motion_length,3).to(device)
     motion_root_rotation = torch.tensor([[[0.,0.,0.,1.]]]).repeat(motion_length,1,1).to(device)
     motion_global_rotation, motion_global_translation = hu_forward_model.forward_kinematics(motion_joint_angles=motion_joint_angles,
                                                                              motion_root_translation=motion_root_translation,
-                                                                             motion_root_rotation=motion_root_rotation)
+                                                                             motion_root_rotation=motion_root_rotation,
+                                                                             clip_angles=True)
 
     from body_visualizer.visualizer import BodyVisualizer
     from motion_convert.robot_config.Hu import hu_graph

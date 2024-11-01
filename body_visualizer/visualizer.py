@@ -81,7 +81,6 @@ class BodyVisualizer:
 
 
 
-
 if __name__ == "__main__":
     import pickle
     import joblib
