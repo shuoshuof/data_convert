@@ -4,10 +4,32 @@ from tqdm import tqdm
 import torch
 from abc import ABC, abstractmethod
 from typing import Optional, Union
+from typing import TypedDict
 import multiprocessing
 import numpy as np
 from tqdm import tqdm
 import pandas as pd
+from typing_extensions import NotRequired
+
+class PipelineArgs(TypedDict):
+    max_epoch:NotRequired[int]
+    lr:NotRequired[float]
+    clip_angle: NotRequired[bool]
+
+    generate_mirror:NotRequired[bool]
+
+    zero_root:NotRequired[bool]
+    filter:NotRequired[bool]
+    fix_joints:NotRequired[bool]
+    joint_indices:NotRequired[list]
+    fix_ankles:NotRequired[bool]
+    height_adjustment:NotRequired[bool]
+    move_to_ground:NotRequired[bool]
+
+    save_info: bool
+
+
+
 class BasePipeline(ABC):
     def __init__(self,motion_dir:str,save_dir:str,num_processes:int=None):
         self.num_processes = multiprocessing.cpu_count() if num_processes is None else num_processes
@@ -31,7 +53,7 @@ class BasePipeline(ABC):
                 if len(results) == num_data:
                     break
 
-    def run(self,debug=False,**kwargs):
+    def run(self,debug=False,**kwargs:PipelineArgs):
         data = self._read_data(**kwargs)
 
         data_chunks = self._split_data(data,**kwargs)
@@ -66,5 +88,3 @@ class BasePipeline(ABC):
         print("all processes done")
 
         return results
-
-

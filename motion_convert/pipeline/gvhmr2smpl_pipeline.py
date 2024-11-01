@@ -93,4 +93,5 @@ class GVHMR2SMPLPipeline(BasePipeline):
 if __name__ == '__main__':
     pipeline = GVHMR2SMPLPipeline(motion_dir='motion_data/10_29/cam',
                                   save_dir='motion_data/10_29/smpl', )
-    pipeline.run(debug=True,height_adjustment=True)
+
+    pipeline.run(debug=True)

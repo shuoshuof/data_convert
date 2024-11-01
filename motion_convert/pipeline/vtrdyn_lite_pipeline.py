@@ -14,7 +14,7 @@ from body_visualizer.visualizer import BodyVisualizer
 from poselib.poselib.skeleton.skeleton3d import SkeletonTree,SkeletonMotion,SkeletonState
 from poselib.poselib.visualization.common import plot_skeleton_H
 
-from motion_convert.pipeline.base_pipeline import BasePipeline
+from motion_convert.pipeline.base_pipeline import BasePipeline,PipelineArgs
 from motion_convert.utils.transform3d import *
 from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
 from motion_convert.utils.motion_process import MotionProcessManager,rescale_motion_to_standard_size,get_mirror_motion
@@ -185,17 +185,21 @@ def vis_new_hu(motion:SkeletonMotion):
 if __name__ == '__main__':
     vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/10_29_vtrdyn_mocap/mocap',
                                                      save_dir='motion_data/10_29_vtrdyn_mocap/hu')
-    vtrdyn_lite_pipeline.run(
-        debug=False,
+    args = PipelineArgs(
         max_epoch=500,
         filter=True,
         fix_joints=True,
         joint_indices=[i for i in range(13,33)],
         fix_ankles=True,
-        fix_root=True,
+        zero_root=True,
         clip_angle=True,
         height_adjustment=False,
         move_to_ground=True,
         generate_mirror=True,
         save_info=True,
     )
+    vtrdyn_lite_pipeline.run(
+        debug=False,
+        **args
+    )
+

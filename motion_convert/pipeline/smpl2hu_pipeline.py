@@ -4,7 +4,7 @@ import pickle
 
 from poselib.poselib.visualization.common import *
 
-from motion_convert.pipeline.base_pipeline import BasePipeline
+from motion_convert.pipeline.base_pipeline import BasePipeline,PipelineArgs
 from motion_convert.utils.transform3d import *
 from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
 from motion_convert.utils.motion_process import *
@@ -129,17 +129,21 @@ if __name__ == '__main__':
 
     smpl2hu_pipeline = SMPL2HuPipeline(motion_dir='motion_data/10_24_1/smpl',
                                       save_dir='motion_data/10_24_1/hu')
-    smpl2hu_pipeline.run(
-        debug=False,
+
+    args = PipelineArgs(
         max_epoch=400,
         filter=True,
         fix_joints=True,
-        joint_indices=[i for i in range(13,33)],
+        joint_indices=[i for i in range(13, 33)],
         fix_ankles=True,
-        fix_root=True,
+        zero_root=True,
         clip_angle=True,
         height_adjustment=False,
         move_to_ground=True,
         generate_mirror=True,
         save_info=True,
+    )
+    smpl2hu_pipeline.run(
+        debug=False,
+        **args
     )
