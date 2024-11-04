@@ -12,18 +12,29 @@ import pandas as pd
 from typing_extensions import NotRequired
 
 class PipelineArgs(TypedDict):
+
     max_epoch:NotRequired[int]
     lr:NotRequired[float]
+
     clip_angle: NotRequired[bool]
 
     generate_mirror:NotRequired[bool]
 
     zero_root:NotRequired[bool]
+    adjust_all_axis:NotRequired[bool]
+
+    add_zero_pose_head:NotRequired[bool]
+    slerp_frame:NotRequired[int]
+
     filter:NotRequired[bool]
+
     fix_joints:NotRequired[bool]
     joint_indices:NotRequired[list]
-    fix_ankles:NotRequired[bool]
+
+    flatten_feet:NotRequired[bool]
+
     height_adjustment:NotRequired[bool]
+
     move_to_ground:NotRequired[bool]
 
     save_info: bool
@@ -37,13 +48,13 @@ class BasePipeline(ABC):
         self.save_dir = save_dir
     @abstractmethod
     def _read_data(self,**kwargs)->Optional[list]:
-        pass
+        raise NotImplementedError
     @abstractmethod
     def _split_data(self,data,**kwargs)->Union[list,np.ndarray]:
-        pass
+        raise NotImplementedError
     @abstractmethod
     def _process_data(self,data_chunk,results,process_idx,debug,**kwargs):
-        pass
+        raise NotImplementedError
     def _update_pbar(self,results,num_data):
         with tqdm(total=num_data) as pbar:
             while True:

@@ -5,7 +5,6 @@ import time
 
 class BodyVisualizer:
     def __init__(self,skeleton_graph=coco34_graph,static_frame=True):
-        # 初始化 3D 图形
         self.fig = plt.figure(figsize=(5,5))
         self.ax = self.fig.add_subplot(111, projection='3d')
 
@@ -18,7 +17,6 @@ class BodyVisualizer:
         # self.skeleton_graph = skeleton_graph_dict[skeleton_format]
         self.skeleton_graph = skeleton_graph
         self.motion_list = []
-        # 初始化关键点列表
     def set_axis(self,root_pos):
         if self.static_frame:
             self.ax.set_xlim([-1,1])
@@ -36,8 +34,6 @@ class BodyVisualizer:
 
 
     def update_plot(self,keypoint):
-        """更新当前帧的3D散点图"""
-
         self.ax.cla()
         self.set_axis(root_pos=keypoint[0])
 

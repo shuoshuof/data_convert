@@ -1,22 +1,31 @@
 import math
 import numpy as np
 import torch
+from collections import OrderedDict
+from typing import Union
+
 from scipy.interpolate import interp1d
+from scipy.interpolate import splrep
 
 from poselib.poselib.skeleton.skeleton3d import SkeletonMotion,SkeletonState,SkeletonTree
 from poselib.poselib.core.rotation3d import *
 
 from motion_convert.robot_config.Hu import Hu_DOF_LOWER,Hu_DOF_UPPER,Hu_DOF_AXIS
-from motion_convert.utils.transform3d import quat_in_xyz_axis
+from motion_convert.utils.transform3d import quat_in_xyz_axis,quat_slerp
 
-def zero_root(motion:SkeletonMotion):
+def zero_root(motion:SkeletonMotion,adjust_all_axis=False):
     new_motion_root_translation = motion.root_translation.clone()
     new_motion_global_rotation = motion.global_rotation.clone()
 
     motion_length,num_joints,_ = motion.global_rotation.shape
     root_quat_x, root_quat_y, root_quat_z = quat_in_xyz_axis(motion.global_root_rotation[0])
-    new_motion_global_rotation = quat_mul(quat_inverse(root_quat_z).reshape(1,1,4).repeat(motion_length,num_joints,1),new_motion_global_rotation)
-    new_motion_root_translation = quat_rotate(quat_inverse(root_quat_z).reshape(1,4).repeat(motion_length,1),new_motion_root_translation)
+    if adjust_all_axis:
+        adjust_quat = quat_inverse(motion.global_root_rotation[0])
+    else:
+        adjust_quat = quat_inverse(root_quat_z)
+    new_motion_global_rotation = quat_mul(adjust_quat.reshape(1,1,4).repeat(motion_length,num_joints,1),new_motion_global_rotation)
+    new_motion_root_translation = quat_rotate(adjust_quat.reshape(1,4).repeat(motion_length,1),new_motion_root_translation)
+
     new_motion_root_translation -= new_motion_root_translation[0].clone()
 
     new_state = SkeletonState.from_rotation_and_root_translation(
@@ -103,8 +112,44 @@ def fix_joints(motion:SkeletonMotion, joint_indices:list):
     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
 
 
+def add_zero_pose_head(motion: SkeletonMotion, slerp_frame: int = 20):
+    hu_zero_pose = SkeletonState.zero_pose(skeleton_tree=motion.skeleton_tree)
+    hu_zero_pose = clip_zero_pose(hu_zero_pose)
+    motion_start_local_rotation = motion.local_rotation[0, :, :]
 
-def fix_ankles(motion: SkeletonMotion):
+    # slerp local rotation
+    slerp_motion_local_rotation = []
+    for i in range(slerp_frame):
+        t = torch.tensor(i / slerp_frame)
+        slerp_motion_local_rotation.append(quat_slerp(hu_zero_pose.local_rotation, motion_start_local_rotation, t))
+    slerp_motion_local_rotation = torch.stack(slerp_motion_local_rotation, dim=0)
+    slerped_rotation_state = SkeletonState.from_rotation_and_root_translation(
+        motion.skeleton_tree,
+        slerp_motion_local_rotation,
+        torch.zeros((slerp_frame, 3)),
+        is_local=True
+    )
+
+    # cal root translation
+    min_h = torch.min(slerped_rotation_state.global_translation[..., 2].clone(), dim=1).values
+    new_root_translation = slerped_rotation_state.root_translation.clone()
+    new_root_translation[:, 2] -= min_h
+
+    slerped_motion_local_rotation = torch.concatenate(
+        [slerped_rotation_state.local_rotation, motion.local_rotation.clone()], dim=0)
+    slerped_motion_root_translation = torch.concatenate([new_root_translation, motion.root_translation.clone()], dim=0)
+
+    result_state = SkeletonState.from_rotation_and_root_translation(
+        motion.skeleton_tree,
+        slerped_motion_local_rotation,
+        slerped_motion_root_translation,
+        is_local=True
+    )
+
+    return SkeletonMotion.from_skeleton_state(result_state, motion.fps)
+
+
+def flatten_feet(motion: SkeletonMotion):
     # TODO:不能用global rotation,没有考虑root rotation
 
     motion_length, _, _ = motion.global_rotation.shape
@@ -153,8 +198,37 @@ def fix_ankles(motion: SkeletonMotion):
     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
 
 
+def clip_zero_pose(zero_pose:SkeletonState):
 
-def check_limit(motion:SkeletonMotion):
+    num_joints,_ = zero_pose.local_rotation.shape
+
+    zero_pose_root_rotation = zero_pose.local_rotation[0,:]
+    zero_pose_joints_exp_map = quat_to_exp_map(zero_pose.local_rotation[1:,:])
+
+    hu_dof_low_limit = Hu_DOF_LOWER.reshape(-1, 1)
+    hu_dof_high_limit = Hu_DOF_UPPER.reshape(-1, 1)
+
+    clamped_exp_map = torch.clamp(zero_pose_joints_exp_map,min=hu_dof_low_limit,max=hu_dof_high_limit)
+
+    motion_rotation_axis = torch.eye(3)[Hu_DOF_AXIS]
+
+    clamped_exp_map = clamped_exp_map*motion_rotation_axis
+
+    clamped_motion_local_rotation = exp_map_to_quat(clamped_exp_map)
+
+
+    new_motion_local_rotation = torch.concatenate([zero_pose_root_rotation.unsqueeze(0), clamped_motion_local_rotation], dim=0)
+
+    clamped_state = SkeletonState.from_rotation_and_root_translation(
+        zero_pose.skeleton_tree,
+        new_motion_local_rotation,
+        zero_pose.root_translation,
+        is_local=True
+    )
+
+    return clamped_state
+
+def clip_dof_pos(motion:Union[SkeletonMotion,SkeletonState]):
 
     motion_length,num_joints,_ = motion.local_rotation.shape
 
@@ -181,7 +255,10 @@ def check_limit(motion:SkeletonMotion):
         motion.root_translation,
         is_local=True
     )
-    return SkeletonMotion.from_skeleton_state(clamped_state,motion.fps)
+    if isinstance(motion,SkeletonMotion):
+        return SkeletonMotion.from_skeleton_state(clamped_state,motion.fps)
+
+    return clamped_state
 
 def get_mirror_motion(motion:SkeletonMotion):
     # xoz对称
@@ -229,8 +306,9 @@ def filter_data(data,filter_name:str='Weighted',**kwargs):
 class MotionProcessManager:
     def __init__(self,**kwargs):
         # height_adjustment and move_to_ground should in the last two
-        self.operations =  {
-        'zero_root': zero_root,
+        self.operations =  OrderedDict({
+        'zero_root': lambda motion: zero_root(motion,adjust_all_axis=kwargs.get('adjust_all_axis',False)),
+        'add_zero_pose_head': lambda motion: add_zero_pose_head(motion,slerp_frame=kwargs.get('slerp_frame',20)),
         'filter': lambda motion: SkeletonMotion.from_skeleton_state(
             SkeletonState.from_rotation_and_root_translation(
                 motion.skeleton_tree,
@@ -241,15 +319,15 @@ class MotionProcessManager:
             fps=motion.fps
         ),
         'fix_joints': lambda motion: fix_joints(motion, joint_indices=kwargs.get('joint_indices',[18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32])),
-        'fix_ankles': fix_ankles,
+        'flatten_feet': flatten_feet,
         'height_adjustment':lambda motion: height_adjustment(motion,kwargs.get('cal_interval',1.2),kwargs.get('rate',0.2)),
         'move_to_ground': move_feet_on_the_ground,
-    }
+    })
 
     def process_motion(self, motion,**kwargs):
         for key, operation in self.operations.items():
             if kwargs.get(key, False):
                 motion = operation(motion).clone()
-        motion = check_limit(motion)
+        motion = clip_dof_pos(motion)
         return motion
 
