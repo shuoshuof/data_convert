@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import torch
+import pickle
 from collections import OrderedDict
 from typing import Union
 
@@ -112,16 +113,20 @@ def fix_joints(motion:SkeletonMotion, joint_indices:list):
     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
 
 
-def add_zero_pose_head(motion: SkeletonMotion, slerp_frame: int = 20):
-    hu_zero_pose = SkeletonState.zero_pose(skeleton_tree=motion.skeleton_tree)
-    hu_zero_pose = clip_zero_pose(hu_zero_pose)
+def add_zero_pose_head(motion: SkeletonMotion, slerp_frame: int = 60, head_frame:int=30):
+    # hu_start_pose = SkeletonState.zero_pose(skeleton_tree=motion.skeleton_tree)
+    with open('asset/start_pose/hu_start_pose.pkl','rb') as f:
+        hu_start_pose:SkeletonState = pickle.load(f)
+
+    # the knee may out of range
+    hu_start_pose = clip_zero_pose(hu_start_pose)
     motion_start_local_rotation = motion.local_rotation[0, :, :]
 
     # slerp local rotation
     slerp_motion_local_rotation = []
     for i in range(slerp_frame):
         t = torch.tensor(i / slerp_frame)
-        slerp_motion_local_rotation.append(quat_slerp(hu_zero_pose.local_rotation, motion_start_local_rotation, t))
+        slerp_motion_local_rotation.append(quat_slerp(hu_start_pose.local_rotation, motion_start_local_rotation, t))
     slerp_motion_local_rotation = torch.stack(slerp_motion_local_rotation, dim=0)
     slerped_rotation_state = SkeletonState.from_rotation_and_root_translation(
         motion.skeleton_tree,
@@ -139,10 +144,18 @@ def add_zero_pose_head(motion: SkeletonMotion, slerp_frame: int = 20):
         [slerped_rotation_state.local_rotation, motion.local_rotation.clone()], dim=0)
     slerped_motion_root_translation = torch.concatenate([new_root_translation, motion.root_translation.clone()], dim=0)
 
+    start_pose_head_local_rotation = hu_start_pose.local_rotation.clone()[None,...].repeat(head_frame,1,1)
+    start_pose_head_root_translation = new_root_translation.clone()[[0]].repeat(head_frame,1)
+
+    result_motion_local_rotation = torch.concatenate(
+        [start_pose_head_local_rotation, slerped_motion_local_rotation], dim=0)
+    result_motion_root_translation = torch.concatenate(
+        [start_pose_head_root_translation, slerped_motion_root_translation], dim=0)
+
     result_state = SkeletonState.from_rotation_and_root_translation(
         motion.skeleton_tree,
-        slerped_motion_local_rotation,
-        slerped_motion_root_translation,
+        result_motion_local_rotation,
+        result_motion_root_translation,
         is_local=True
     )
 
@@ -308,7 +321,7 @@ class MotionProcessManager:
         # height_adjustment and move_to_ground should in the last two
         self.operations =  OrderedDict({
         'zero_root': lambda motion: zero_root(motion,adjust_all_axis=kwargs.get('adjust_all_axis',False)),
-        'add_zero_pose_head': lambda motion: add_zero_pose_head(motion,slerp_frame=kwargs.get('slerp_frame',20)),
+        'add_zero_pose_head': lambda motion: add_zero_pose_head(motion,slerp_frame=kwargs.get('slerp_frame',60)),
         'filter': lambda motion: SkeletonMotion.from_skeleton_state(
             SkeletonState.from_rotation_and_root_translation(
                 motion.skeleton_tree,

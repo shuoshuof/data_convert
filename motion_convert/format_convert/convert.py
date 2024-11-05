@@ -1,6 +1,6 @@
 from poselib.poselib.skeleton.skeleton3d import SkeletonMotion,SkeletonState,SkeletonTree
 
-def motion2isaac(motion:SkeletonMotion):
+def skeleton_motion2isaac(motion:SkeletonMotion):
     motion_dict = {}
     motion_dict['pose_quat_global'] = motion.global_rotation.numpy()
     motion_dict['pose_quat'] = motion.local_rotation.numpy()

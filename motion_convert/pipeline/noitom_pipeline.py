@@ -14,7 +14,7 @@ from motion_convert.robot_config.Hu import NOITOM2HU_JOINT_MAPPING,hu_graph
 from motion_convert.robot_config.NOITOM import NOITOM_JOINT_NAMES,noitom_graph
 from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
 from motion_convert.utils.motion_process import MotionProcessManager,rescale_motion_to_standard_size,get_mirror_motion
-from motion_convert.format_convert.convert import motion2isaac
+from motion_convert.format_convert.convert import skeleton_motion2isaac
 
 
 def get_motion_translation(data):
@@ -135,7 +135,7 @@ class ConvertNoitomPipeline(BasePipeline):
             motion_save_dir = self.save_dir+'_motion'
             os.makedirs(motion_save_dir,exist_ok=True)
             for name, motion in motion_list:
-                motion_dict = motion2isaac(motion)
+                motion_dict = skeleton_motion2isaac(motion)
                 save_dict  = {name:motion_dict}
                 with open(f'{self.save_dir}/{name}.pkl', 'wb') as f:
                     joblib.dump(save_dict,f)

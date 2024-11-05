@@ -1,6 +1,7 @@
-from poselib.poselib.skeleton.skeleton3d import SkeletonMotion
+from poselib.poselib.skeleton.skeleton3d import SkeletonMotion,SkeletonState
 from body_visualizer.visualizer import BodyVisualizer
-def vis_motion(motion:SkeletonMotion,graph:str,static_frame=False):
+from typing import Union
+def vis_motion(motion:Union[SkeletonMotion,SkeletonState],graph:str,static_frame=False):
     from motion_convert.robot_config.Hu import hu_graph
     from motion_convert.robot_config.VTRDYN import vtrdyn_graph
     graph_dict = {

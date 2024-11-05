@@ -52,15 +52,15 @@ class BaseRetargetOptimizer(ABC):
 
     @abstractmethod
     def _cal_loss(self,forward_model_output,motion_data) -> Union[torch.Tensor,torch.nn.Module]:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def _init_params(self,**kwargs) -> Union[list,dict]:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def _set_optimizer(self, lr: float, **kwargs):
-        pass
+        raise NotImplementedError
 
     def _set_lr_scheduler(self) \
             -> Optional[torch.optim.lr_scheduler.LRScheduler]:

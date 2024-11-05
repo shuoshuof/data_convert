@@ -22,7 +22,7 @@ from motion_convert.utils.motion_process import MotionProcessManager,rescale_mot
 from motion_convert.robot_config.Hu import VTRDYN_LITE2HU_JOINT_MAPPING,hu_graph
 from motion_convert.robot_config.VTRDYN import vtrdyn_lite_graph,VTRDYN_CONNECTIONS_LITE,VTRDYN_JOINT_NAMES_LITE
 
-from motion_convert.format_convert.convert import motion2isaac
+from motion_convert.format_convert.convert import skeleton_motion2isaac
 
 def get_motion_translation(data):
     motion_length = len(data)
@@ -144,7 +144,7 @@ class ConvertVtrdynLitePipeline(BasePipeline):
             motion_save_dir = self.save_dir+'_motion'
             os.makedirs(motion_save_dir,exist_ok=True)
             for name, motion in motion_list:
-                motion_dict = motion2isaac(motion)
+                motion_dict = skeleton_motion2isaac(motion)
                 save_dict  = {name:motion_dict}
                 with open(f'{self.save_dir}/{name}.pkl', 'wb') as f:
                     joblib.dump(save_dict,f)
@@ -183,8 +183,8 @@ def vis_new_hu(motion:SkeletonMotion):
     vis_motion(new_motion,graph='hu',static_frame=False)
 
 if __name__ == '__main__':
-    vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/11_2_1/mocap',
-                                                     save_dir='motion_data/11_2_1/hu')
+    vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/11_5_with_start_pose_head/mocap',
+                                                     save_dir='motion_data/11_5_with_start_pose_head/hu')
     args = PipelineArgs(
         max_epoch=500,
         clip_angle=True,
@@ -200,6 +200,7 @@ if __name__ == '__main__':
         move_to_ground=True,
         save_info=True,
     )
+
     vtrdyn_lite_pipeline.run(
         debug=False,
         **args

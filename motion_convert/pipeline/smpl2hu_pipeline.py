@@ -9,7 +9,7 @@ from motion_convert.utils.transform3d import *
 from motion_convert.retarget_optimizer.hu_retarget_optimizer import HuRetargetOptimizer
 from motion_convert.utils.motion_process import *
 from motion_convert.robot_config.Hu import *
-from motion_convert.format_convert.convert import motion2isaac
+from motion_convert.format_convert.convert import skeleton_motion2isaac
 
 class SMPL2HuPipeline(BasePipeline):
     def __init__(self, motion_dir: str, save_dir: str, num_processes: int = None):
@@ -114,7 +114,7 @@ class SMPL2HuPipeline(BasePipeline):
             motion_save_dir = self.save_dir+'_motion'
             os.makedirs(motion_save_dir,exist_ok=True)
             for name, motion in motion_list:
-                motion_dict = motion2isaac(motion)
+                motion_dict = skeleton_motion2isaac(motion)
                 save_dict  = {name:motion_dict}
                 with open(f'{self.save_dir}/{name}.pkl', 'wb') as f:
                     joblib.dump(save_dict,f)
