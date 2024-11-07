@@ -1,20 +1,24 @@
+import time
+import math
+from typing import List,Union
+from abc import ABC,abstractmethod
+
 import matplotlib.pyplot as plt
 import torch
 from vedo import *
-from typing import List,Union
 from motion_convert.collision_detection.obb import OBB,OBBCollisionDetector
+from motion_convert.utils.torch_ext import to_torch,to_numpy
+
 from poselib.poselib.core.rotation3d import *
-import time
 
-
-class ObbVisualizer:
+class OBBVisualizer(ABC):
     def __init__(self,obb_collision_detector:Union[OBBCollisionDetector]):
 
         self.obb_collision_detector = obb_collision_detector
 
         self.plotter = Plotter()
 
-        self.world_frame = Box(pos=[0, 0, 0], length=2, width=2, height=2).wireframe()
+        self.world_frame = Box(pos=[0, 0, 0], length=10, width=10, height=10).wireframe()
         self.plotter.add(self.world_frame)
 
         self.button = self.plotter.add_button(
@@ -27,59 +31,53 @@ class ObbVisualizer:
         self.timer_id =None
 
         self.plotter.add_callback('timer',self.loop,enable_picking=False)
-        self.plotter.show()
+        self.plotter.show(axes=1,viewup='z')
 
 
     def _button_func(self, obj, ename):
         if self.timer_id is not None:
             self.plotter.timer_callback("destroy",self.timer_id)
         if "Play" in self.button.status():
-            self.timer_id = self.plotter.timer_callback("create",dt=10)
+            self.timer_id = self.plotter.timer_callback("create",dt=5)
 
         self.button.switch()
+    @abstractmethod
+    def loop_fun(self,event):
+        raise NotImplementedError
 
     def loop(self,event):
         self.counter += 1
+        self.loop_fun(event)
 
-        self.obb_collision_detector.update_obbs_transform(
-            global_rotations=torch.tensor([[0,0,0,1],[0,0,0,1]]),
-            global_translations=torch.tensor([[self.counter/1000,0,0],[-self.counter/1000,0,0]]),
-        )
-        self.plotter.clear()
-        obb_boxes = [ObbBox(obb) for obb in self.obb_collision_detector.obbs()]
-
-        self.plotter.add(*obb_boxes,self.world_frame)
-        self.plotter.render()
+class OBBVertices(Points):
+    def __init__(self, obb:OBB,index):
+        vertices = to_numpy(obb.vertices)
+        super().__init__(vertices,r=10,c=index)
 
 
 
+class OBBBox(Box):
+    def __init__(self, obb:OBB,trail=0):
 
-
-class ObbBox(Box):
-    def __init__(self, obb:OBB,trail=10):
-
-        pos = torch_to_numpy(obb.global_translation)
-        length, width, height = 2*torch_to_numpy(obb.extents)
+        pos = to_numpy(obb.global_translation)
+        length, width, height = 2*to_numpy(obb.extents)
         super().__init__(pos,length,width,height)
         self.update(obb)
-
+        self.wireframe()
         if trail > 0:
             self.add_trail(trail)
 
     def update(self,obb:OBB):
         obb_rotation_angle,obb_rotation_axis = quat_to_angle_axis(obb.global_rotation)
-        obb_rotation_axis = torch_to_numpy(obb_rotation_axis)
-        obb_rotation_angle = torch_to_numpy(obb_rotation_angle)
-        self.rotate(angle=obb_rotation_angle, axis=obb_rotation_axis)
-        self.pos(*obb.global_translation)
+        obb_rotation_axis = to_numpy(obb_rotation_axis)
+        obb_rotation_angle = to_numpy(obb_rotation_angle)
+        self.rotate(angle=obb_rotation_angle, axis=obb_rotation_axis,rad=True)
+        obb_center = to_numpy(obb.global_translation)
+        self.pos(*obb_center)
 
 
 
 
-def torch_to_numpy(t):
-    if isinstance(t, torch.Tensor):
-        return t.cpu().detach().numpy()
-    return t
 
 if __name__ == "__main__":
 
@@ -110,4 +108,4 @@ if __name__ == "__main__":
     #     obbv.update_obbs_boxes(obb_detector.get_obbs())
     #     obbv.render()
 
-    obb_visualizer = ObbVisualizer(obb_detector)
+    obb_visualizer = OBBVisualizer(obb_detector)

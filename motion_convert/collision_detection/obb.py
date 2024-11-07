@@ -56,18 +56,18 @@ class OBB:
         signs = torch.tensor([-1,1],dtype=torch.float32).to(self.device)
         vertices = torch.cartesian_prod(signs,signs,signs)@(self._extents.unsqueeze(1)*self._axes)
         # the axes have been rotated, so vertices don't need to
-        return vertices + self.global_translation
+        return vertices.clone() + self.global_translation
 
     def _cal_axes(self):
-        return quat_rotate(self.global_rotation.unsqueeze(0),self._axes)
+        return quat_rotate(self.global_rotation.unsqueeze(0),self._axes).clone()
 
     def update_transform(self,global_translation=None,global_rotation=None):
         if global_translation is not None:
             self._global_translation = global_translation.to(self.device)
         if global_rotation is not None:
             self._global_rotation = global_rotation.to(self.device)
-        self._vertices = self._cal_vertices()
         self._axes = self._cal_axes()
+        self._vertices = self._cal_vertices()
 
 class OBBCollisionDetector:
     def __init__(self,obbs:List[OBB],device='cuda'):
@@ -180,8 +180,9 @@ class OBBCollisionDetector:
         collision_mat = torch.where(obbs_centers_diff_proj_tensor>obbs_vertices_vec_proj_dist_sum_tensor,0,1)
         collision_mat = torch.min(collision_mat, dim=-1).values
         assert collision_mat.shape == (self.num_obbs,self.num_obbs)
-        print(collision_mat)
-        # comb_indices = torch.cartesian_prod(*[torch.arange(self._num_obbs)]*2)
+
+        # mask = torch.logical_not(torch.eye(self.num_obbs)).to(self.device)
+
         return collision_mat
 
 
@@ -212,7 +213,7 @@ if __name__ == '__main__':
         global_translation=torch.tensor((0,0,0)),
     )
 
-    obb_detector = OBBCollisionDetector([obb1, obb2, obb3,obb4]*10)
+    obb_detector = OBBCollisionDetector([obb1, obb2, obb3,obb4]*20)
 
 
     for i in range(100):
@@ -224,7 +225,7 @@ if __name__ == '__main__':
         obb_detector.check_collision()
         end = time.time()
 
-        # print(f"cal_obbs_separating_axes: {(end - start) }")
+        print(f"cal_obbs_separating_axes: {(end - start) }")
 
 
 
