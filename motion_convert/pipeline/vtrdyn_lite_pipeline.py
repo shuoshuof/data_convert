@@ -6,6 +6,7 @@ import torch
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 import joblib
+import time
 import numpy as np
 import pickle
 import pandas as pd
@@ -137,9 +138,10 @@ class ConvertVtrdynLitePipeline(BasePipeline):
             # vis_hu(retargeted_motion.global_translation)
 
             motion_list = []
-            motion_list.append([file_name,result_motion])
+            save_time = time.strftime('%m_%d_%H')
+            motion_list.append([file_name+'_'+save_time,result_motion])
             if kwargs.get('generate_mirror', False):
-                motion_list.append([file_name+'_mirror',get_mirror_motion(result_motion)])
+                motion_list.append([file_name+'_'+save_time+'_mirror',get_mirror_motion(result_motion)])
 
             motion_save_dir = self.save_dir+'_motion'
             os.makedirs(motion_save_dir,exist_ok=True)
@@ -183,8 +185,8 @@ def vis_new_hu(motion:SkeletonMotion):
     vis_motion(new_motion,graph='hu',static_frame=False)
 
 if __name__ == '__main__':
-    vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/11_5_with_start_pose_head/mocap',
-                                                     save_dir='motion_data/11_5_with_start_pose_head/hu')
+    vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/11_7_walk/mocap',
+                                                     save_dir='motion_data/11_7_walk/hu')
     args = PipelineArgs(
         max_epoch=500,
         clip_angle=True,
