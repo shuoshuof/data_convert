@@ -5,28 +5,7 @@ from typing import List,Union
 from motion_convert.collision_detection.obb import OBB,OBBCollisionDetector
 from poselib.poselib.core.rotation3d import *
 import time
-# class ObbVisualizer:
-#     def __init__(self, obbs:List[OBB]):
-#         self.obbs_boxes = [ObbBox(obb) for obb in obbs]
-#
-#         world_frame =  Box(pos=[0,0,0],length=2,width=2,height=2).wireframe()
-#
-#         self.plotter = Plotter()
-#         self.plotter.add(world_frame)
-#         self.button = self.plotter.add_button(
-#             self._button_func,
-#             states=["\u23F5 Play  ", "\u23F8 Pause"],
-#             font="Kanopus",
-#             size=32,
-#         )
-#     def _button_func(self, evt):
-#         self.button.switch()
-#     def update_obbs_boxes(self,obbs:List[OBB]):
-#         for i,obb in enumerate(obbs):
-#             self.obbs_boxes[i].update(obb)
-#
-#     def render(self):
-#         self.plotter.show(*self.obbs_boxes, axes=1, viewup='z', interactive=False)
+
 
 class ObbVisualizer:
     def __init__(self,obb_collision_detector:Union[OBBCollisionDetector]):
@@ -67,7 +46,7 @@ class ObbVisualizer:
             global_translations=torch.tensor([[self.counter/1000,0,0],[-self.counter/1000,0,0]]),
         )
         self.plotter.clear()
-        obb_boxes = [ObbBox(obb) for obb in self.obb_collision_detector.get_obbs()]
+        obb_boxes = [ObbBox(obb) for obb in self.obb_collision_detector.obbs()]
 
         self.plotter.add(*obb_boxes,self.world_frame)
         self.plotter.render()
@@ -79,7 +58,7 @@ class ObbVisualizer:
 class ObbBox(Box):
     def __init__(self, obb:OBB,trail=10):
 
-        pos = torch_to_numpy(obb.center)
+        pos = torch_to_numpy(obb.global_translation)
         length, width, height = 2*torch_to_numpy(obb.extents)
         super().__init__(pos,length,width,height)
         self.update(obb)
@@ -105,16 +84,14 @@ def torch_to_numpy(t):
 if __name__ == "__main__":
 
     obb1 = OBB(
-        center=torch.tensor([0,0,0]),
-        axes=torch.eye(3),
+        initial_axes=torch.eye(3),
         extents=torch.tensor([1e-2,1e-2,1e-2]),
         global_rotation=torch.tensor([0,0,0,1]),
         global_translation=torch.tensor((0,0,0)),
     )
 
     obb2 = OBB(
-        center=torch.tensor([1,0,0]),
-        axes=torch.eye(3),
+        initial_axes=torch.eye(3),
         extents=torch.tensor([1e-2,1e-2,1e-2]),
         global_rotation=torch.tensor([0,0,0,1]),
         global_translation=torch.tensor((0,0,0)),

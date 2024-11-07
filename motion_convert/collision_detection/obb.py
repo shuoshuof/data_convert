@@ -8,36 +8,34 @@
 from typing import Union
 
 import torch
-import numpy as np
+import time
 
 from poselib.poselib.core.rotation3d import *
 
 class OBB:
     def __init__(
             self,
-            center:torch.Tensor,
-            axes:torch.Tensor,
+            initial_axes:torch.Tensor,
             extents:torch.Tensor,
             global_rotation:torch.Tensor,
             global_translation:torch.Tensor,
+            device='cuda'
     ):
-        self._center = center
-        self._axes = axes
-        self._extents = extents
-        self._global_rotation = global_rotation
-        self._global_translation = global_translation
+        self._axes = initial_axes.to(device)
+        self._extents = extents.to(device)
+        self._global_rotation = global_rotation.to(device)
+        self._global_translation = global_translation.to(device)
+        self.device = device
 
-        assert self._center.shape == (3,)
         assert self._axes.shape == (3, 3)
         assert self._extents.shape == (3,)
         assert self._global_rotation.shape == (4,)
         assert self._global_translation.shape == (3,)
 
-        self._vertices = self.cal_vertices()
+        self._vertices = self._cal_vertices()
+        self._axes = self._cal_axes()
+
         assert self._vertices.shape == (8, 3)
-    @property
-    def center(self):
-        return self._center.clone()
     @property
     def axes(self):
         return self._axes.clone()
@@ -53,47 +51,181 @@ class OBB:
     @property
     def vertices(self):
         return self._vertices.clone()
-    def cal_vertices(self):
-        signs = torch.tensor([-1,1],dtype=torch.float32)
-        vertices = torch.cartesian_prod(*signs[None,:]*self._extents[:,None])
-        return quat_rotate(self.global_rotation.unsqueeze(0),vertices) + self.global_translation + self.center
+
+    def _cal_vertices(self):
+        signs = torch.tensor([-1,1],dtype=torch.float32).to(self.device)
+        vertices = torch.cartesian_prod(signs,signs,signs)@(self._extents.unsqueeze(1)*self._axes)
+        # the axes have been rotated, so vertices don't need to
+        return vertices + self.global_translation
+
+    def _cal_axes(self):
+        return quat_rotate(self.global_rotation.unsqueeze(0),self._axes)
 
     def update_transform(self,global_translation=None,global_rotation=None):
         if global_translation is not None:
-            self._global_translation = global_translation
+            self._global_translation = global_translation.to(self.device)
         if global_rotation is not None:
-            self._global_rotation = global_rotation
-        self._vertices = self.cal_vertices()
+            self._global_rotation = global_rotation.to(self.device)
+        self._vertices = self._cal_vertices()
+        self._axes = self._cal_axes()
 
 class OBBCollisionDetector:
-    def __init__(self,obbs:List[OBB]):
+    def __init__(self,obbs:List[OBB],device='cuda'):
         self._obbs = obbs
         self._num_obbs = len(obbs)
+        self.device = device
         # TODO: the collision of two near links from a robot may not be considered as collision
         self.collision_mask = torch.eye(self._num_obbs, dtype=torch.bool)
 
     @property
     def num_obbs(self):
         return self._num_obbs
-
-    def get_obbs(self):
+    @property
+    def obbs(self):
         return self._obbs
-
+    def obbs_global_translation(self)->torch.Tensor:
+        return torch.stack([obb.global_translation for obb in self.obbs])
+    def obbs_global_rotation(self)->torch.Tensor:
+        return torch.stack([obb.global_rotation for obb in self.obbs])
+    def obbs_vertices(self)->torch.Tensor:
+        return torch.stack([obb.vertices for obb in self.obbs])
+    def obbs_axes(self)->torch.Tensor:
+        return torch.stack([obb.axes for obb in self.obbs])
     def update_obbs_transform(self,global_rotations,global_translations):
         for i,(global_rotation,global_translation) in enumerate(zip(global_rotations,global_translations)):
             self._obbs[i].update_transform(global_translation, global_rotation)
+    def _cal_obbs_separating_axes_tensor(self):
+        # (num_obbs,num_obbs,15,3)
+        # main_axes: (num_obbs,num_obbs,6,3)
+        main_axes = torch.concatenate(
+            [self.obbs_axes().unsqueeze(1).repeat(1,self.num_obbs,1,1),
+                    self.obbs_axes().unsqueeze(0).repeat(self.num_obbs,1,1,1)],dim=-2)
+        assert main_axes.shape == (self.num_obbs,self.num_obbs,6,3)
 
+        # obbs_axes: (num_obbs,3,3) -> (num_obbs,1,3,3) -> (num_obbs,num_obbs,3,3) -> (num_obbs,num_obbs,3,1,3)
+        edge1 = self.obbs_axes().unsqueeze(1).repeat(1,self.num_obbs,1,1).unsqueeze(-2)
+        # obbs_axes: (num_obbs,3,3) -> (1,num_obbs,3,3) -> (num_obbs,num_obbs,3,3) -> (num_obbs,num_obbs,1,3,3)
+        edge2 = self.obbs_axes().unsqueeze(0).repeat(self.num_obbs,1,1,1).unsqueeze(-3)
+
+        cross_axes = torch.cross(edge1,edge2,dim=-1).reshape(self.num_obbs,self.num_obbs,9,3)
+        assert cross_axes.shape == (self.num_obbs,self.num_obbs,9,3)
+
+        separating_axes = torch.cat([main_axes,cross_axes],dim=-2)
+        assert separating_axes.shape == (self.num_obbs,self.num_obbs,15,3)
+
+        return separating_axes
+    def _cal_obbs_centers_tensor(self):
+        r"""
+        return the diff between each pair of obbs's centers with shape (num_obbs,num_obbs,2,3)
+        """
+        obbs_centers =  torch.concatenate(
+            [self.obbs_global_translation().unsqueeze(1).repeat(1,self.num_obbs,1).unsqueeze(-2),
+                    self.obbs_global_translation().unsqueeze(0).repeat(self.num_obbs,1,1).unsqueeze(-2)],dim=-2)
+        assert obbs_centers.shape == (self.num_obbs,self.num_obbs,2,3)
+        return obbs_centers
+
+    def _cal_obbs_centers_diff_tensor(self, obbs_centers_tensor):
+        return obbs_centers_tensor.clone()[..., [0], :]- obbs_centers_tensor.clone()[..., [1], :]
+
+    def _cal_obbs_vertices_tensor(self):
+        r"""
+        :return: vertices tensor with shape (num_obbs,num_obbs,2,8,3)
+        """
+        obbs_vertices = torch.concatenate(
+            [self.obbs_vertices().unsqueeze(1).repeat(1,self.num_obbs,1,1).unsqueeze(-3),
+                    self.obbs_vertices().unsqueeze(0).repeat(self.num_obbs,1,1,1).unsqueeze(-3)],dim=-3)
+        assert obbs_vertices.shape == (self.num_obbs,self.num_obbs,2,8,3)
+        return obbs_vertices
+    def _cal_obbs_vertices_vec_proj_dist_tensor(self, obbs_centers_tensor,obb_separating_axes_tensor):
+        r"""
+        :param obbs_centers_tensor: shape (num_obbs,num_obbs,2,3)
+        :param obb_separating_axes_tensor: shape (num_obbs,num_obbs,15,3)
+        :return: projection distances tensor with shape (num_obbs,num_obbs,2,15)
+        """
+        obbs_vertices_tensor = self._cal_obbs_vertices_tensor()
+        obbs_vertices_vec_tensor = obbs_vertices_tensor - obbs_centers_tensor.unsqueeze(-2)
+        # [ (num_obbs,num_obbs,2,8,3)->(num_obbs,num_obbs,2,8,1,3)] [(num_obbs,num_obbs,15,3)->(num_obbs,num_obbs,1,1,15,3)]
+        # -> (num_obbs,num_obbs,2,8,15)
+        obbs_vertices_vec_proj = torch.sum(obbs_vertices_vec_tensor.unsqueeze(-2)*obb_separating_axes_tensor.unsqueeze(2).unsqueeze(-3),dim=-1)
+        assert obbs_vertices_vec_proj.shape == (self.num_obbs,self.num_obbs,2,8,15)
+
+        obbs_vertices_vec_proj_dist_tensor = torch.abs(obbs_vertices_vec_proj)
+        obbs_vertices_vec_proj_dist_tensor = torch.max(obbs_vertices_vec_proj_dist_tensor,dim=-2).values
+        assert obbs_vertices_vec_proj_dist_tensor.shape == (self.num_obbs,self.num_obbs,2,15)
+
+        return obbs_vertices_vec_proj_dist_tensor
+
+    def check_collision(self):
+        r"""
+             separating axes              vertices                centers diff             projection
+        (num_obbs,num_obbs,15,3), (num_obbs,num_obbs,2,8,3), (num_obbs,num_obbs,1,3)   (num_obbs,num_obbs,15)
+        """
+        # TODO: filter the collision between two obbs whose distance are far
+        # TODO： check the vertices calculation
+        # TODO: check the axes calculation
+        obb_separating_axes_tensor = self._cal_obbs_separating_axes_tensor()
+
+        obbs_centers_tensor = self._cal_obbs_centers_tensor()
+        obbs_centers_diff_tensor = self._cal_obbs_centers_diff_tensor(obbs_centers_tensor)
+
+        # (num_obbs,num_obbs,15,3) (num_obbs,num_obbs,1,3) -> (num_obbs,num_obbs,15)
+        obbs_centers_diff_proj_tensor = torch.sum(obb_separating_axes_tensor*obbs_centers_diff_tensor,dim=-1)
+
+        assert obbs_centers_diff_proj_tensor.shape == (self.num_obbs,self.num_obbs,15)
+
+        obbs_vertices_vec_proj_dist_tensor = self._cal_obbs_vertices_vec_proj_dist_tensor(obbs_centers_tensor,obb_separating_axes_tensor)
+        obbs_vertices_vec_proj_dist_sum_tensor = torch.sum(obbs_vertices_vec_proj_dist_tensor,dim=-2)
+        assert obbs_vertices_vec_proj_dist_sum_tensor.shape == (self.num_obbs,self.num_obbs,15)
+
+        collision_mat = torch.where(obbs_centers_diff_proj_tensor>obbs_vertices_vec_proj_dist_sum_tensor,0,1)
+        collision_mat = torch.min(collision_mat, dim=-1).values
+        assert collision_mat.shape == (self.num_obbs,self.num_obbs)
+        print(collision_mat)
+        # comb_indices = torch.cartesian_prod(*[torch.arange(self._num_obbs)]*2)
+        return collision_mat
 
 
 if __name__ == '__main__':
-    obb = OBB(
-        center=torch.tensor([0,0,0]),
-        axes=torch.eye(3),
-        extents=torch.tensor([1,2,3]),
+    obb1 = OBB(
+        initial_axes=torch.eye(3),
+        extents=torch.tensor([1e-2,1e-2,1e-2]),
         global_rotation=torch.tensor([0,0,0,1]),
-        global_translation=torch.tensor((1,2,3)),
+        global_translation=torch.tensor((0,0,0)),
     )
-    print(obb.vertices)
+
+    obb2 = OBB(
+        initial_axes=torch.eye(3),
+        extents=torch.tensor([1e-2,1e-2,1e-2]),
+        global_rotation=torch.tensor([0,0,0,1]),
+        global_translation=torch.tensor((0,0,0)),
+    )
+    obb3 = OBB(
+        initial_axes=torch.eye(3),
+        extents=torch.tensor([1e-2,1e-2,1e-2]),
+        global_rotation=torch.tensor([0,0,0,1]),
+        global_translation=torch.tensor((0,0,0)),
+    )
+    obb4 = OBB(
+        initial_axes=torch.eye(3),
+        extents=torch.tensor([1e-2,1e-2,1e-2]),
+        global_rotation=torch.tensor([0,0,0,1]),
+        global_translation=torch.tensor((0,0,0)),
+    )
+
+    obb_detector = OBBCollisionDetector([obb1, obb2, obb3,obb4]*10)
+
+
+    for i in range(100):
+        start = time.time()
+        obb_detector.update_obbs_transform(
+            global_rotations=torch.randn(obb_detector.num_obbs,4),
+            global_translations=torch.randn(obb_detector.num_obbs,3),
+        )
+        obb_detector.check_collision()
+        end = time.time()
+
+        # print(f"cal_obbs_separating_axes: {(end - start) }")
+
 
 
 
