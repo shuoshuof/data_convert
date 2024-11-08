@@ -67,24 +67,58 @@ def my_check_collision(obb_detector:OBBCollisionDetector):
 
     return collision0with1,collision0with2
 
-class TestOBB(unittest.TestCase):
-    def test_obbs(self):
-        num_tests=100
-        for i in range(num_tests):
-            with self.subTest(test_idx = i):
-                obbs_config, motion_global_translations = init_random_test_config()
-                obb_collision_detector = OBBCollisionDetector(list(obbs_config.values()))
-                for global_translations in motion_global_translations:
-                    obb_collision_detector.update_obbs_transform(
-                        global_rotations=None,
-                        global_translations=global_translations,
-                    )
+# class TestOBB(unittest.TestCase):
+#     def test_obbs(self):
+#         num_tests=100
+#         for i in range(num_tests):
+#             with self.subTest(test_idx = i):
+#                 obbs_config, motion_global_translations = init_random_test_config()
+#                 obb_collision_detector = OBBCollisionDetector(list(obbs_config.values()))
+#                 for global_translations in motion_global_translations:
+#                     obb_collision_detector.update_obbs_transform(
+#                         global_rotations=None,
+#                         global_translations=global_translations,
+#                     )
+#
+#                     obb_collision_detector.obbs_vertices()
+#                     collision_mat = obb_collision_detector.check_collision()
+#                     collision0with1,collision0with2 = collision_mat[0,1],collision_mat[0,2]
+#                     my_collision0with1,my_collision0with2 = my_check_collision(obb_collision_detector)
+#                     self.assertEqual((collision0with1,collision0with2),(my_collision0with1,my_collision0with2))
 
-                    obb_collision_detector.obbs_vertices()
-                    collision_mat = obb_collision_detector.check_collision()
-                    collision0with1,collision0with2 = collision_mat[0,1],collision_mat[0,2]
-                    my_collision0with1,my_collision0with2 = my_check_collision(obb_collision_detector)
-                    self.assertEqual((collision0with1,collision0with2),(my_collision0with1,my_collision0with2))
+def generate_test(i, obbs_config, motion_global_translations):
+    def test(self):
+        obb_collision_detector = OBBCollisionDetector(list(obbs_config.values()))
+        for global_translations in motion_global_translations:
+            obb_collision_detector.update_obbs_transform(
+                global_rotations=None,
+                global_translations=global_translations,
+            )
+
+            obb_collision_detector.obbs_vertices()
+            collision_mat = obb_collision_detector.check_collision()
+            collision0with1, collision0with2 = collision_mat[0, 1], collision_mat[0, 2]
+            my_collision0with1, my_collision0with2 = my_check_collision(obb_collision_detector)
+
+            # 比较碰撞结果
+            self.assertEqual((collision0with1, collision0with2), (my_collision0with1, my_collision0with2))
+
+    # 为该测试方法命名
+    test.__name__ = f'test_obbs_{i}'
+    return test
+
+class TestOBB(unittest.TestCase):
+    pass
+
+def init_tests():
+    num_tests = 100
+    for i in range(num_tests):
+        obbs_config, motion_global_translations = init_random_test_config()
+        test_method = generate_test(i, obbs_config, motion_global_translations)
+        setattr(TestOBB, f'test_obbs_{i}', test_method)
+
+init_tests()
 
 if __name__ == '__main__':
-    pass
+
+    unittest.main()
