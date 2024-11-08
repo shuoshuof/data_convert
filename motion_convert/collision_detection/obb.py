@@ -21,20 +21,22 @@ class OBB:
             global_translation:torch.Tensor,
             device='cuda'
     ):
-        self._axes = initial_axes.to(device)
+        self._initial_axes = initial_axes.to(device)
         self._extents = extents.to(device)
         self._global_rotation = global_rotation.to(device)
         self._global_translation = global_translation.to(device)
         self.device = device
 
-        assert self._axes.shape == (3, 3)
+        assert self._initial_axes.shape == (3, 3)
         assert self._extents.shape == (3,)
         assert self._global_rotation.shape == (4,)
         assert self._global_translation.shape == (3,)
 
-        self._vertices = self._cal_vertices()
+        # need to be updated by global_translation and global_rotation
         self._axes = self._cal_axes()
+        self._vertices = self._cal_vertices()
 
+        assert self._axes.shape == (3, 3)
         assert self._vertices.shape == (8, 3)
     @property
     def axes(self):
@@ -59,7 +61,7 @@ class OBB:
         return vertices.clone() + self.global_translation
 
     def _cal_axes(self):
-        return quat_rotate(self.global_rotation.unsqueeze(0),self._axes).clone()
+        return quat_rotate(self.global_rotation.unsqueeze(0),self._initial_axes).clone()
 
     def update_transform(self,global_translation=None,global_rotation=None):
         if global_translation is not None:
@@ -181,9 +183,9 @@ class OBBCollisionDetector:
         collision_mat = torch.min(collision_mat, dim=-1).values
         assert collision_mat.shape == (self.num_obbs,self.num_obbs)
 
-        # mask = torch.logical_not(torch.eye(self.num_obbs)).to(self.device)
+        mask = torch.logical_not(torch.eye(self.num_obbs)).to(self.device)
 
-        return collision_mat
+        return collision_mat*mask
 
 
 if __name__ == '__main__':
