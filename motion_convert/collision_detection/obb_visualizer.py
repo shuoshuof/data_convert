@@ -75,6 +75,12 @@ class OBBBox(Box):
         obb_center = to_numpy(obb.global_translation)
         self.pos(*obb_center)
 
+class OBBAxes(Lines):
+    def __init__(self, obb:OBB):
+        axes = to_numpy(obb.axes)
+        start  = to_numpy(obb.global_translation.unsqueeze(0).repeat(3,1))
+        end = start + axes
+        super().__init__(start, end, lw=5)
 
 
 
