@@ -93,6 +93,8 @@ class OBBCollisionDetector:
         return torch.stack([obb.vertices for obb in self.obbs])
     def obbs_axes(self)->torch.Tensor:
         return torch.stack([obb.axes for obb in self.obbs])
+    def obbs_extents(self)->torch.Tensor:
+        return torch.stack([obb.extents for obb in self.obbs])
     def update_obbs_transform(self,global_rotations,global_translations):
         if global_rotations is None:
             global_rotations = [None] * self.num_obbs
@@ -139,6 +141,9 @@ class OBBCollisionDetector:
     def _cal_obbs_centers_diff_tensor(self, obbs_centers_tensor):
         return (obbs_centers_tensor.clone()[..., [0], :]- obbs_centers_tensor.clone()[..., [1], :]).abs()
 
+    def _cal_obbs_centers_diff_proj_tensor(self,obb_separating_axes_tensor,obbs_centers_diff_tensor):
+        return torch.sum(obb_separating_axes_tensor*obbs_centers_diff_tensor,dim=-1).abs()
+
     def _cal_obbs_vertices_tensor(self):
         r"""
         :return: vertices tensor with shape (num_obbs,num_obbs,2,8,3)
@@ -181,7 +186,7 @@ class OBBCollisionDetector:
         obbs_centers_diff_tensor = self._cal_obbs_centers_diff_tensor(obbs_centers_tensor)
 
         # (num_obbs,num_obbs,15,3) (num_obbs,num_obbs,1,3) -> (num_obbs,num_obbs,15)
-        obbs_centers_diff_proj_tensor = torch.sum(obb_separating_axes_tensor*obbs_centers_diff_tensor,dim=-1).abs()
+        obbs_centers_diff_proj_tensor = self._cal_obbs_centers_diff_proj_tensor(obb_separating_axes_tensor,obbs_centers_diff_tensor)
 
         assert obbs_centers_diff_proj_tensor.shape == (self.num_obbs,self.num_obbs,15)
 
@@ -197,7 +202,7 @@ class OBBCollisionDetector:
 
         mask = torch.logical_not(torch.eye(self.num_obbs)).to(self.device)
 
-        return collision_mat*mask
+        return (collision_mat*mask).to(torch.bool)
 
 
 if __name__ == '__main__':

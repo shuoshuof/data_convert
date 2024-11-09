@@ -54,6 +54,9 @@ class OBBVertices(Points):
         vertices = to_numpy(obb.vertices)
         super().__init__(vertices,r=10,c=index)
 
+class OBBText(Text3D):
+    def __init__(self,obb:OBB,index):
+        super().__init__(txt=f"{index}",pos=to_numpy(obb.global_translation))
 
 
 class OBBBox(Box):

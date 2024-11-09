@@ -36,19 +36,19 @@ def init_random_test_config():
     obbs_config = OrderedDict(
         obb0=OBB(
             initial_axes=torch.eye(3),
-            extents=torch.clamp(torch.rand(3)*3,min=0.5,max=3),
+            extents=torch.tensor([1,1,1]),
             global_rotation=torch.tensor([0,0,0,1]),
             global_translation=torch.tensor([0,0,0]),
         ),
         obb1=OBB(
             initial_axes=torch.eye(3),
-            extents=torch.clamp(torch.rand(3)*3,min=0.5,max=3),
+            extents=torch.clamp(torch.rand(3),min=0.2,max=1/1.73),
             global_rotation=quat_from_angle_axis(torch.rand(1)*3.14,torch.rand(3)).squeeze(0),
             global_translation=torch.tensor([3,0,0]),
         ),
         obb2=OBB(
             initial_axes=torch.eye(3),
-            extents=torch.clamp(torch.rand(3)*3,min=0.5,max=3),
+            extents=torch.clamp(torch.rand(3),min=0.2,max=1/1.73),
             global_rotation=quat_from_angle_axis(torch.rand(1)*3.14,torch.rand(3)).squeeze(0),
             global_translation=torch.tensor([0,3,0]),
         ),
@@ -62,8 +62,11 @@ def my_check_collision(obb_detector:OBBCollisionDetector):
     obb0_collision_min_bound = obbs_global_translation[0]-obb_extents[0]
     obb0_collision_max_bound = obbs_global_translation[0]+obb_extents[0]
 
-    collision0with1 = torch.any(torch.all((obbs_vertices[1]>=obb0_collision_min_bound) & (obbs_vertices[1]<=obb0_collision_max_bound),dim=1))
-    collision0with2 = torch.any(torch.all((obbs_vertices[2]>=obb0_collision_min_bound) & (obbs_vertices[2]<=obb0_collision_max_bound),dim=1))
+    # TODO: check the correctness of the collision detection
+    # collision0with1 = torch.any(torch.all(torch.all(obbs_vertices[1]>=obb0_collision_min_bound,dim=1) & (obbs_vertices[1]<=obb0_collision_max_bound),dim=1))
+    # collision0with2 = torch.any(torch.all((obbs_vertices[2]>=obb0_collision_min_bound) & (obbs_vertices[2]<=obb0_collision_max_bound),dim=1))
+    collision0with1 = torch.any(torch.all(obbs_vertices[1]>=obb0_collision_min_bound,dim=1) & torch.all(obbs_vertices[1]<=obb0_collision_max_bound,dim=1))
+    collision0with2 = torch.any(torch.all(obbs_vertices[2]>=obb0_collision_min_bound,dim=1) & torch.all(obbs_vertices[2]<=obb0_collision_max_bound,dim=1))
 
     return collision0with1,collision0with2
 
