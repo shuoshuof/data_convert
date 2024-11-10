@@ -39,7 +39,6 @@ class OBBVisualizer(ABC):
             self.plotter.timer_callback("destroy",self.timer_id)
         if "Play" in self.button.status():
             self.timer_id = self.plotter.timer_callback("create",dt=5)
-
         self.button.switch()
     @abstractmethod
     def loop_fun(self,event):
