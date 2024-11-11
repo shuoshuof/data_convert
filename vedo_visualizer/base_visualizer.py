@@ -5,10 +5,14 @@
 @File ：base_visualizer.py
 @Project ：data_convert
 """
+from typing import List
 from abc import ABC,abstractmethod
 import math
+import copy
 
 from vedo import *
+
+from vedo_visualizer.vedo_robot import VedoRobot
 
 settings.default_backend = "vtk"
 settings.immediate_rendering = False
@@ -18,8 +22,7 @@ class BaseVedoVisualizer(ABC):
         self.num_subplots = num_subplots
         self._init_plotter()
 
-        self.pause_button = self.plotter.at(num_subplots
-                                            ).add_button(
+        self.pause_button = self.plotter.at(num_subplots-1).add_button(
             self._stop_button_func,
             states=["\u23F5 Play", "\u23F8 Pause"],
             font="Kanopus",
@@ -44,35 +47,41 @@ class BaseVedoVisualizer(ABC):
         self.pause_button.switch()
 
     @abstractmethod
-    def loop_func(self,event,**kwargs):
-        raise NotImplementedError
-
     def loop(self,event):
         self.counter += 1
-        self.loop_func(event)
 
     def show(self):
         self.plotter.timer_callback("start")
         self.plotter.interactive()
 
 class RobotVisualizer(BaseVedoVisualizer):
-    def __init__(self,num_subplots:int=1):
+    def __init__(self, num_subplots:int, robot:VedoRobot, data:List):
         super().__init__(num_subplots)
+        self.robots = [copy.deepcopy(robot) for _ in range(num_subplots)]
+        self.data = data
+        assert len(self.data) == self.num_subplots
         self._add_robot()
+
     def _add_robot(self):
-        self.robot = Box(pos=(0, 0, 0), c='b', alpha=0.1)
         for i in range(self.num_subplots):
-            self.plotter.at(i).show(self.robot)
-    def loop_func(self, event,**kwargs):
+            self.plotter.at(i).show(self.robots[i].robot_mesh)
+    def update_plt(self):
         for i in range(self.num_subplots):
-            self.plotter.at(i).add(self.robot)
+            self.plotter.at(i).clear()
+            self.plotter.at(i).add(self.robots[i].robot_mesh)
+            self.plotter.at(i).add(self.robots[i].markers)
         self.plotter.render()
+    @abstractmethod
+    def update_robot(self):
+        raise NotImplementedError
 
-
+    def loop(self, event):
+        self.counter +=1
+        self.update_robot()
+        self.update_plt()
 
 if __name__ == '__main__':
-    vis = RobotVisualizer()
-    vis.show()
+    pass
 
 
 

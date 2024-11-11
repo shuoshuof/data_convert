@@ -227,20 +227,20 @@ if __name__ == '__main__':
     #     global_translation=torch.tensor([0,3,0]),
     # )
 
-    obb_detector = OBBCollisionDetector([obb1, obb2])
+    obb_detector = OBBCollisionDetector([obb1, obb2]*20)
     obb_detector.check_collision()
 
 
-    # for i in range(100):
-    #     start = time.time()
-    #     # obb_detector.update_obbs_transform(
-    #     #     global_rotations=torch.randn(obb_detector.num_obbs,4),
-    #     #     global_translations=torch.randn(obb_detector.num_obbs,3),
-    #     # )
-    #     obb_detector.check_collision()
-    #     end = time.time()
-    #
-    #     print(f"cal_obbs_separating_axes: {(end - start) }")
+    for i in range(100):
+        start = time.time()
+        # obb_detector.update_obbs_transform(
+        #     global_rotations=torch.randn(obb_detector.num_obbs,4),
+        #     global_translations=torch.randn(obb_detector.num_obbs,3),
+        # )
+        obb_detector.check_collision()
+        end = time.time()
+
+        print(f"cal_obbs_separating_axes: {(end - start) }")
 
 
 

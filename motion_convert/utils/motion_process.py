@@ -292,6 +292,29 @@ def get_mirror_motion(motion:SkeletonMotion):
     )
     return SkeletonMotion.from_skeleton_state(mirror_state,motion.fps)
 
+# def left_to_rigth_euler(pose_euler):
+#     pose_euler[:, :, 0] = pose_euler[:, :, 0] * -1
+#     pose_euler[:, :, 2] = pose_euler[:, :, 2] * -1
+#     pose_euler = pose_euler[:, left_right_idx, :]
+#     return pose_euler
+#
+#
+# def flip_smpl(pose, trans=None):
+#     """
+#     Pose input batch * 72
+#     """
+#     curr_spose = sRot.from_rotvec(pose.reshape(-1, 3))
+#     curr_spose_euler = curr_spose.as_euler("ZXY", degrees=False).reshape(pose.shape[0], 24, 3)
+#     curr_spose_euler = left_to_rigth_euler(curr_spose_euler)
+#     curr_spose_rot = sRot.from_euler("ZXY", curr_spose_euler.reshape(-1, 3), degrees=False)
+#     curr_spose_aa = curr_spose_rot.as_rotvec().reshape(pose.shape[0], 24, 3)
+#     if trans != None:
+#         pass
+#         # target_root_mat = curr_spose.as_matrix().reshape(pose.shape[0], 24, 3, 3)[:, 0]
+#         # root_mat = curr_spose_rot.as_matrix().reshape(pose.shape[0], 24, 3, 3)[:, 0]
+#         # apply_mat = np.matmul(target_root_mat[0], np.linalg.inv(root_mat[0]))
+#
+#     return curr_spose_aa.reshape(-1, 72)
 
 class WeightedFilter:
     def __init__(self, alpha=0.3):
