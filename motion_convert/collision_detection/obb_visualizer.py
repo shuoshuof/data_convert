@@ -74,13 +74,13 @@ class OBBBox(Box):
         obb_rotation_axis = to_numpy(obb_rotation_axis)
         obb_rotation_angle = to_numpy(obb_rotation_angle)
         self.rotate(angle=obb_rotation_angle, axis=obb_rotation_axis,rad=True)
-        obb_center = to_numpy(obb.global_translation)
+        obb_center = to_numpy(obb.center_pos)
         self.pos(*obb_center)
 
 class OBBAxes(Lines):
     def __init__(self, obb:OBB):
         axes = to_numpy(obb.axes)
-        start  = to_numpy(obb.global_translation.unsqueeze(0).repeat(3,1))
+        start  = to_numpy(obb.center_pos.unsqueeze(0).repeat(3,1))
         end = start + axes
         super().__init__(start, end, lw=5)
 

@@ -37,18 +37,21 @@ def init_random_test_config():
         obb0=OBB(
             initial_axes=torch.eye(3),
             extents=torch.tensor([1,1,1]),
+            origin=torch.tensor([0,0,0]),
             global_rotation=torch.tensor([0,0,0,1]),
             global_translation=torch.tensor([0,0,0]),
         ),
         obb1=OBB(
             initial_axes=torch.eye(3),
             extents=torch.clamp(torch.rand(3),min=0.2,max=1/1.74),
+            origin=torch.tensor([0.3, 0.2, 0.1]),
             global_rotation=quat_from_angle_axis(torch.rand(1)*3.14,torch.rand(3)).squeeze(0),
             global_translation=torch.tensor([3,0,0]),
         ),
         obb2=OBB(
             initial_axes=torch.eye(3),
             extents=torch.clamp(torch.rand(3),min=0.2,max=1/1.74),
+            origin=torch.tensor([0.1, 0.5, 0.2]),
             global_rotation=quat_from_angle_axis(torch.rand(1)*3.14,torch.rand(3)).squeeze(0),
             global_translation=torch.tensor([0,3,0]),
         ),
