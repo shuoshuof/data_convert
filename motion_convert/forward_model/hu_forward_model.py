@@ -36,6 +36,7 @@ class HuForwardModel(BaseForwardModel):
 
 if __name__ == '__main__':
     import pickle
+    from poselib.poselib.visualization.common import plot_skeleton_H
 
     with open('asset/zero_pose/hu_zero_pose.pkl', 'rb') as f:
         hu_zero_pose:SkeletonState = pickle.load(f)
@@ -56,6 +57,20 @@ if __name__ == '__main__':
                                                                              motion_root_translation=motion_root_translation,
                                                                              motion_root_rotation=motion_root_rotation,
                                                                              clip_angles=True)
+
+    new_sk_state = SkeletonState.from_rotation_and_root_translation(
+        hu_zero_pose.skeleton_tree,
+        motion_global_rotation.cpu().detach(),
+        motion_global_translation[:,0,].cpu().detach(),
+        is_local=False
+    )
+
+    new_motion = SkeletonMotion.from_skeleton_state(new_sk_state,fps=30)
+
+    plot_skeleton_H([new_motion])
+
+    with open('motion_data/test_motion.pkl','wb') as f:
+        pickle.dump(new_motion,f)
 
     from body_visualizer.visualizer import BodyVisualizer
     from motion_convert.robot_config.Hu import hu_graph

@@ -292,6 +292,41 @@ def get_mirror_motion(motion:SkeletonMotion):
     )
     return SkeletonMotion.from_skeleton_state(mirror_state,motion.fps)
 
+def motion_concatenate(motions:List[Union[SkeletonMotion,SkeletonState]]):
+    r"""
+    all the motions should have the same skeleton tree
+    :param motions:
+    :return:
+    """
+    motions_local_rotation = []
+    motions_root_translation = []
+    for motion in motions:
+        motions_local_rotation.append(motion.local_rotation.clone())
+        motions_root_translation.append(motion.root_translation.clone())
+
+    new_sk_state = SkeletonState.from_rotation_and_root_translation(
+        motions[0].skeleton_tree,
+        torch.cat(motions_local_rotation,dim=0),
+        torch.cat(motions_root_translation,dim=0),
+        is_local=True
+    )
+    return SkeletonMotion.from_skeleton_state(new_sk_state,motions[0].fps)
+
+def hu_zero_motion():
+    with open('asset/hu_pose/hu_v5_zero_pose.pkl', 'rb') as f:
+        hu_v5_zero_pose:SkeletonState = pickle.load(f)
+
+    new_local_rotation = hu_v5_zero_pose.local_rotation.unsqueeze(0).repeat(100,1,1)
+    new_root_translation = hu_v5_zero_pose.root_translation.unsqueeze(0).repeat(100,1)
+
+    new_sk_state = SkeletonState.from_rotation_and_root_translation(
+        hu_v5_zero_pose.skeleton_tree,
+        new_local_rotation,
+        new_root_translation,
+        is_local=True
+    )
+    return new_sk_state
+
 # def left_to_rigth_euler(pose_euler):
 #     pose_euler[:, :, 0] = pose_euler[:, :, 0] * -1
 #     pose_euler[:, :, 2] = pose_euler[:, :, 2] * -1

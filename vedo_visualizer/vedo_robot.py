@@ -23,7 +23,7 @@ from urdfpy import URDF
 
 class VedoRobot:
     def __init__(self,urdf_path):
-        self.robot_zero_pose,link_mesh_file_names = self._parse_urdf(urdf_path)
+        self.robot_zero_pose,link_mesh_file_names,self.joint_translations = self._parse_urdf(urdf_path)
         self._original_robot_mesh = self._generate_robot(urdf_path, self.robot_zero_pose, link_mesh_file_names)
         self._robot_mesh = self.original_robot_mesh
     @property
@@ -46,35 +46,40 @@ class VedoRobot:
         link_names = []
         link_mesh_file_names = []
         link_translations = []
-
+        visual_origins = []
         # for (link,transform),joint in zip(fk_link.items(),urdf_robot.joints):
         for link,transform in fk_link.items():
             link_name = link.name
             link_translation = transform[:3,3]
             # joint_translation = joint.origin[:3, 3]
+            visual_origin = link.visuals[0].origin
 
             link_mesh_file_names.append(link.visuals[0].geometry.mesh.filename)
             link_names.append(link_name)
             link_translations.append(link_translation)
             # joint_translations.append(joint_translation)
+            visual_origins.append(visual_origin)
+
         link_translations = np.array(link_translations)
         link_local_translations = np.zeros_like(link_translations)
         link_local_translations[1:] = link_translations[1:]-link_translations[link_parents[1:]]
 
         joint_names = []
         joint_translations = []
-        joint_parents = []
-        for joint in urdf_robot.joints:
+        joint_parent_names = []
+        joint_name2joint_idx = {}
+        for joint_idx, joint in enumerate(urdf_robot.joints):
             joint_name = joint.name
             joint_translation = joint.origin[:3, 3]
-            joint_parents.append(joint.parent)
+            joint_parent_names.append(joint.parent)
             joint_names.append(joint_name)
             joint_translations.append(joint_translation)
 
-        # joint_translations = np.array(joint_translations)
+        joint_translations = np.array(joint_translations)
         # joint_local_translations = np.zeros_like(joint_translations)
-        # joint_local_translations[1:] = joint_translations[1:]-joint_translations[link_parents[1:]]
+        # joint_local_translations[1:] = joint_translations[1:]-joint_translations[joint_parent_names[1:]]
 
+        # urdf_robot.show()
 
         # print(link_names)
         # print(link_parents)
@@ -88,7 +93,7 @@ class VedoRobot:
         robot_zero_pose = SkeletonState.zero_pose(robot_sk_tree)
         # from poselib.poselib.visualization.common import plot_skeleton_H
         # plot_skeleton_H([robot_zero_pose])
-        return robot_zero_pose, link_mesh_file_names
+        return robot_zero_pose, link_mesh_file_names, joint_translations
     def _generate_robot(self,urdf_path,robot_zero_pose:SkeletonState,link_mesh_file_names):
         robot_sk_tree = robot_zero_pose.skeleton_tree
         robot_meshes = []
@@ -98,25 +103,26 @@ class VedoRobot:
             mesh = Mesh(file_path,alpha=0.5)
             mesh.pos(joint_global_translation)
             robot_meshes.append(mesh)
-            markers.append(Sphere(pos=joint_global_translation, r=0.05, c='red'))
-        plotter = Plotter(axes=1,bg='white')
-        plotter.show(*robot_meshes,*markers)
+            # markers.append(Sphere(pos=joint_global_translation, r=0.02, c='red'))
+        # plotter = Plotter(axes=1,bg='white')
+        # plotter.show(*robot_meshes,*markers)
         return robot_meshes
 
     def robot_transform(self,link_global_translations:torch.Tensor, link_global_rotations:torch.Tensor):
         new_robot_mesh = []
         markers = []
         for link_mesh,link_global_translation,link_global_rotation in zip(self.original_robot_mesh, link_global_translations, link_global_rotations):
-            link_rotation_angle, link_rotation_axis = quat_to_angle_axis(link_global_rotation)
+            link_rotation_angle, link_rotation_axis = quat_to_angle_axis(quat_normalize(link_global_rotation))
             link_rotation_angle = to_numpy(link_rotation_angle)
             link_rotation_axis = to_numpy(link_rotation_axis)
+
             link_mesh.rotate(angle=link_rotation_angle, axis=link_rotation_axis, rad=True)
             link_mesh.pos(link_global_translation.numpy())
             new_robot_mesh.append(link_mesh)
-            # new_robot_mesh.append(Sphere(pos=link_global_translation, r=0.05, c='red'))
-            markers.append(Sphere(pos=link_global_translation, r=0.05, c='red'))
+            markers.append(Sphere(pos=link_global_translation, r=0.02, c='red'))
         self._robot_mesh = new_robot_mesh
         self.markers = markers
+
 class HuVedoRobot(VedoRobot):
     def __init__(self,urdf_path='asset/hu/hu_v5.urdf'):
         super().__init__(urdf_path)
