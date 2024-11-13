@@ -12,7 +12,7 @@ import copy
 
 from vedo import *
 
-from vedo_visualizer.vedo_robot import VedoRobot
+from vedo_visualizer.vedo_robot import BaseVedoRobot
 
 settings.default_backend = "vtk"
 settings.immediate_rendering = False
@@ -55,29 +55,34 @@ class BaseVedoVisualizer(ABC):
         self.plotter.interactive()
 
 class RobotVisualizer(BaseVedoVisualizer):
-    def __init__(self, num_subplots:int, robot:VedoRobot, data:List):
+    def __init__(self, num_subplots:int, robots:List[BaseVedoRobot], data:List):
         super().__init__(num_subplots)
-        self.robots = [copy.deepcopy(robot) for _ in range(num_subplots)]
+        self.robots_list = [copy.deepcopy(robots) for _ in range(num_subplots)]
+        self.num_vedo_robot = len(robots)
+
         self.data = data
         assert len(self.data) == self.num_subplots
         self._add_robot()
 
     def _add_robot(self):
         for i in range(self.num_subplots):
-            self.plotter.at(i).show(self.robots[i].robot_mesh)
+            for j in range(self.num_vedo_robot):
+                self.plotter.at(i).add(*self.robots_list[i][j].robot_geometries)
+        self.plotter.show()
     def update_plt(self):
         for i in range(self.num_subplots):
             self.plotter.at(i).clear()
-            self.plotter.at(i).add(self.robots[i].robot_mesh)
-            self.plotter.at(i).add(self.robots[i].markers)
+            # for j in range(self.num_vedo_robot):
+            #     self.plotter.at(i).add(*self.robots_list[i][j].robot_geometries)
+            self.plotter.at(i).add(*self.robots_list[i][0].robot_geometries,*self.robots_list[i][1].robot_geometries)
         self.plotter.render()
     @abstractmethod
-    def update_robot(self):
+    def update_robots(self):
         raise NotImplementedError
 
     def loop(self, event):
         self.counter +=1
-        self.update_robot()
+        self.update_robots()
         self.update_plt()
 
 if __name__ == '__main__':

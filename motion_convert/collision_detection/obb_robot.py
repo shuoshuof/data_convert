@@ -7,6 +7,7 @@
 """
 
 from typing import Union,List
+from collections import OrderedDict
 import time
 import copy
 
@@ -23,29 +24,34 @@ class OBBRobot:
     def __init__(self,urdf_path,device='cuda'):
         self.device = device
         self.load_robot(urdf_path)
+
     def load_robot(self,urdf_path:str):
         from motion_convert.utils.parse_urdf import parse_urdf,cal_urdf_mesh_bounding_boxes
 
         robot_zero_pose,_ = parse_urdf(urdf_path)
         meshes_bounding_boxes = cal_urdf_mesh_bounding_boxes(urdf_path)
         self._init_obbs(robot_zero_pose,meshes_bounding_boxes)
+    @classmethod
+    def from_dict(cls,dict:OrderedDict):
+        pass
 
     def _init_obbs(self,robot_zero_pose:SkeletonState,meshes_bounding_boxes:List[trimesh.primitives.Box]):
         self._num_obbs = len(meshes_bounding_boxes)
 
         self._initial_axes = torch.zeros((self.num_obbs,3,3)).to(self.device)
         self._extents = torch.zeros((self.num_obbs,3)).to(self.device)
-        self._origins = torch.zeros((self.num_obbs,3)).to(self.device)
+        self._initial_origins = torch.zeros((self.num_obbs, 3)).to(self.device)
         self._global_rotations = torch.zeros((self.num_obbs,4)).to(self.device)
         self._global_translations = torch.zeros((self.num_obbs,3)).to(self.device)
 
         for joint_idx, box in enumerate(meshes_bounding_boxes):
             self._initial_axes[joint_idx] = torch.eye(3)
             self._extents[joint_idx] = to_torch(copy.deepcopy(box.extents))/2
-            self._origins[joint_idx] = to_torch(copy.deepcopy(box.transform[:3,3]))
+            self._initial_origins[joint_idx] = to_torch(copy.deepcopy(box.transform[:3, 3]))
             self._global_rotations[joint_idx] = torch.tensor([0,0,0,1])
             self._global_translations[joint_idx] = robot_zero_pose.global_translation[joint_idx]
 
+        self._origins = self._cal_origins()
         self._axes = self._cal_axes()
         self._vertices = self._cal_vertices()
 
@@ -86,14 +92,21 @@ class OBBRobot:
         # the axes have been rotated, so vertices don't need to
         return vertices.clone() + self.global_translations.unsqueeze(1) + self.origins.unsqueeze(1)
 
-    def update_transform(self, global_translations=None, global_rotations=None):
-        assert global_translations.shape == (self._num_obbs,3)
-        assert global_rotations.shape == (self._num_obbs,4)
+    def _cal_origins(self):
+        return quat_rotate(self.global_rotations,self._initial_origins.clone())
 
+    def update_transform(self, global_translations=None, global_rotations=None, from_link_transform=False):
         if global_translations is not None:
-            self._global_translation = global_translations.to(self.device)
+            assert global_translations.shape == (self._num_obbs, 3)
+            # if from_link_transform:
+            #     self._global_translations = self.cal_obb_translation_from_link(global_translations,global_rotations)
+            # else:
+            self._global_translations = global_translations.to(self.device)
         if global_rotations is not None:
-            self._global_rotation = global_rotations.to(self.device)
+            assert global_rotations.shape == (self._num_obbs, 4)
+            self._global_rotations = global_rotations.to(self.device)
+        if from_link_transform:
+            self._origins = self._cal_origins()
         self._axes = self._cal_axes()
         self._vertices = self._cal_vertices()
 
@@ -117,18 +130,20 @@ class OBBRobotCollisionDetector:
         return self.obb_robot.global_rotations
     def obb_robot_center_pos(self)->torch.Tensor:
         return self.obb_robot.center_pos
+    def obb_robot_origin(self)->torch.Tensor:
+        return self.obb_robot.origins
     def obb_robot_vertices(self)->torch.Tensor:
         return self.obb_robot.vertices
     def obb_robot_axes(self)->torch.Tensor:
         return self.obb_robot.axes
     def obb_robot_extents(self)->torch.Tensor:
         return self.obb_robot.extents
-    def update_obbs_transform(self,global_rotations,global_translations):
+    def update_obbs_transform(self,global_translations,global_rotations,from_link_transform):
         if global_rotations is None:
             global_rotations = [None] * self.num_obbs
         if global_translations is None:
             global_translations = [None] * self.num_obbs
-        self.obb_robot.update_transform(global_translations=global_translations,global_rotations=global_rotations)
+        self._obb_robot.update_transform(global_translations=global_translations,global_rotations=global_rotations,from_link_transform=from_link_transform)
 
     def _cal_obbs_separating_axes_tensor(self):
         r"""
@@ -242,9 +257,10 @@ if __name__ == '__main__':
     for i in range(100):
         start = time.time()
         obb_detector.update_obbs_transform(
-            global_rotations=torch.randn(obb_detector.num_obbs,4),
             global_translations=torch.randn(obb_detector.num_obbs,3),
+            global_rotations=torch.randn(obb_detector.num_obbs, 4),
         )
+        # print(obb_detector.obb_robot_global_rotation())
         obb_detector.check_collision()
         end = time.time()
 
