@@ -33,6 +33,7 @@ class OBBRobot:
         self._init_obbs(robot_zero_pose,meshes_bounding_boxes)
     @classmethod
     def from_dict(cls,dict:OrderedDict):
+        # TODO: complete this
         pass
 
     def _init_obbs(self,robot_zero_pose:SkeletonState,meshes_bounding_boxes:List[trimesh.primitives.Box]):
@@ -40,18 +41,18 @@ class OBBRobot:
 
         self._initial_axes = torch.zeros((self.num_obbs,3,3)).to(self.device)
         self._extents = torch.zeros((self.num_obbs,3)).to(self.device)
-        self._initial_origins = torch.zeros((self.num_obbs, 3)).to(self.device)
+        self._initial_offsets = torch.zeros((self.num_obbs, 3)).to(self.device)
         self._global_rotations = torch.zeros((self.num_obbs,4)).to(self.device)
         self._global_translations = torch.zeros((self.num_obbs,3)).to(self.device)
 
         for joint_idx, box in enumerate(meshes_bounding_boxes):
             self._initial_axes[joint_idx] = torch.eye(3)
             self._extents[joint_idx] = to_torch(copy.deepcopy(box.extents))/2
-            self._initial_origins[joint_idx] = to_torch(copy.deepcopy(box.transform[:3, 3]))
+            self._initial_offsets[joint_idx] = to_torch(copy.deepcopy(box.transform[:3, 3]))
             self._global_rotations[joint_idx] = torch.tensor([0,0,0,1])
             self._global_translations[joint_idx] = robot_zero_pose.global_translation[joint_idx]
 
-        self._origins = self._cal_origins()
+        self._offsets = self._cal_offsets()
         self._axes = self._cal_axes()
         self._vertices = self._cal_vertices()
 
@@ -68,8 +69,8 @@ class OBBRobot:
     def extents(self):
         return self._extents.clone()
     @property
-    def origins(self):
-        return self._origins.clone()
+    def offsets(self):
+        return self._offsets.clone()
     @property
     def global_rotations(self):
         return self._global_rotations.clone()
@@ -81,19 +82,20 @@ class OBBRobot:
         return self._vertices.clone()
     @property
     def center_pos(self):
-        return self.global_translations + self.origins
+        return self.global_translations + self.offsets
 
     def _cal_axes(self):
         return quat_rotate(self.global_rotations.unsqueeze(1),self._initial_axes.clone())
 
     def _cal_vertices(self):
         signs = torch.tensor([-1,1],dtype=torch.float32).to(self.device)
-        vertices = torch.cartesian_prod(signs,signs,signs)@(self.extents.unsqueeze(1)*self._axes)
+        vertices = torch.cartesian_prod(signs,signs,signs)@(self.extents.unsqueeze(-1)*self.axes)
         # the axes have been rotated, so vertices don't need to
-        return vertices.clone() + self.global_translations.unsqueeze(1) + self.origins.unsqueeze(1)
+        return vertices.clone() + self.center_pos.unsqueeze(1)
 
-    def _cal_origins(self):
-        return quat_rotate(self.global_rotations,self._initial_origins.clone())
+
+    def _cal_offsets(self):
+        return quat_rotate(self.global_rotations, self._initial_offsets.clone())
 
     def update_transform(self, global_translations=None, global_rotations=None, from_link_transform=False):
         if global_translations is not None:
@@ -106,7 +108,7 @@ class OBBRobot:
             assert global_rotations.shape == (self._num_obbs, 4)
             self._global_rotations = global_rotations.to(self.device)
         if from_link_transform:
-            self._origins = self._cal_origins()
+            self._offsets = self._cal_offsets()
         self._axes = self._cal_axes()
         self._vertices = self._cal_vertices()
 
@@ -130,15 +132,15 @@ class OBBRobotCollisionDetector:
         return self.obb_robot.global_rotations
     def obb_robot_center_pos(self)->torch.Tensor:
         return self.obb_robot.center_pos
-    def obb_robot_origin(self)->torch.Tensor:
-        return self.obb_robot.origins
+    def obb_robot_offsets(self)->torch.Tensor:
+        return self.obb_robot.offsets
     def obb_robot_vertices(self)->torch.Tensor:
         return self.obb_robot.vertices
     def obb_robot_axes(self)->torch.Tensor:
         return self.obb_robot.axes
     def obb_robot_extents(self)->torch.Tensor:
         return self.obb_robot.extents
-    def update_obbs_transform(self,global_translations,global_rotations,from_link_transform):
+    def update_obbs_transform(self,global_translations,global_rotations,from_link_transform=False):
         if global_rotations is None:
             global_rotations = [None] * self.num_obbs
         if global_translations is None:
