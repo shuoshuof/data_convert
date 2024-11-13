@@ -144,18 +144,25 @@ class OBBRobot:
         self._vertices = self._cal_vertices()
 
 class OBBRobotCollisionDetector:
-    def __init__(self,obb_robot:OBBRobot,collision_mask:torch.Tensor=None,device='cuda'):
+    def __init__(
+            self,
+            obb_robot:OBBRobot,
+            additional_collision_mask:torch.Tensor=None,
+            use_zero_pose_mask=True,
+            device='cuda'
+    ):
         self._obb_robot = obb_robot
         self._num_obbs = self._obb_robot.num_obbs
         self.device = device
         # the collision of two near links from a robot may not be considered as collision
         self.collision_mask = obb_robot.collision_mask_mat
         # filter out the collision of two near links from a robot
-        mask = torch.logical_not(self.check_collision())
-        self.collision_mask *=mask
-        if collision_mask is not None:
-            assert collision_mask.shape == self.collision_mask.shape
-            self.collision_mask *=collision_mask.to(self.device)
+        if use_zero_pose_mask:
+            zero_pose_mask = torch.logical_not(self.check_collision())
+            self.collision_mask *= zero_pose_mask
+        if additional_collision_mask is not None:
+            assert additional_collision_mask.shape == self.collision_mask.shape
+            self.collision_mask *=additional_collision_mask.to(self.device)
     @property
     def num_obbs(self):
         return self._num_obbs

@@ -57,13 +57,13 @@ def vis_sk_motion(motions:List[Union[SkeletonMotion,SkeletonState]]):
 
     obb_robot = OBBRobot.from_urdf(urdf_path='asset/hu/hu_v5.urdf')
 
-    collision_mask_mat = torch.zeros((obb_robot.num_obbs,obb_robot.num_obbs),dtype=torch.bool)
+    collision_mask_mat = torch.ones((obb_robot.num_obbs,obb_robot.num_obbs),dtype=torch.bool)
     collision_mask_mat[11,13] = 0
     collision_mask_mat[13,11] = 0
     collision_mask_mat[11,22] = 0
     collision_mask_mat[22,11] = 0
 
-    obb_detector = OBBRobotCollisionDetector(obb_robot=obb_robot,collision_mask=collision_mask_mat)
+    obb_detector = OBBRobotCollisionDetector(obb_robot=obb_robot, additional_collision_mask=collision_mask_mat)
     vedo_obb_robot = VedoOBBRobot.from_obb_detector(obb_detector)
 
     robots = [vedo_obb_robot,vedo_hu_robot]
@@ -77,7 +77,7 @@ def vis_sk_motion(motions:List[Union[SkeletonMotion,SkeletonState]]):
 if __name__ == '__main__':
     import pickle
     import copy
-    with open('motion_data/10_24_noitom_mocap_data/take003_motion.pkl','rb') as f:
+    with open('motion_data/test_motion.pkl','rb') as f:
         motion = pickle.load(f)
 
     vis_sk_motion([copy.deepcopy(motion)])
