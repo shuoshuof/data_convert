@@ -21,36 +21,53 @@ from poselib.poselib.skeleton.skeleton3d import SkeletonMotion,SkeletonTree,Skel
 from motion_convert.utils.torch_ext import to_torch
 
 class OBBRobot:
-    def __init__(self,urdf_path,device='cuda'):
+    def __init__(self,device='cuda'):
         self.device = device
-        self.load_robot(urdf_path)
 
-    def load_robot(self,urdf_path:str):
+    @staticmethod
+    def load_robot(urdf_path:str):
         from motion_convert.utils.parse_urdf import parse_urdf,cal_urdf_mesh_bounding_boxes
 
         robot_zero_pose,_ = parse_urdf(urdf_path)
         meshes_bounding_boxes = cal_urdf_mesh_bounding_boxes(urdf_path)
-        self._init_obbs(robot_zero_pose,meshes_bounding_boxes)
+        return robot_zero_pose,meshes_bounding_boxes
+
     @classmethod
     def from_dict(cls,dict:OrderedDict):
         # TODO: complete this
         pass
+    @classmethod
+    def from_urdf(cls,urdf_path,device='cuda'):
+        robot_zero_pose, meshes_bounding_boxes = cls.load_robot(urdf_path)
+        obb_robot = cls(device)
+        obb_robot._init_obbs(robot_zero_pose, meshes_bounding_boxes)
+        return obb_robot
 
     def _init_obbs(self,robot_zero_pose:SkeletonState,meshes_bounding_boxes:List[trimesh.primitives.Box]):
         self._num_obbs = len(meshes_bounding_boxes)
 
-        self._initial_axes = torch.zeros((self.num_obbs,3,3)).to(self.device)
-        self._extents = torch.zeros((self.num_obbs,3)).to(self.device)
-        self._initial_offsets = torch.zeros((self.num_obbs, 3)).to(self.device)
-        self._global_rotations = torch.zeros((self.num_obbs,4)).to(self.device)
-        self._global_translations = torch.zeros((self.num_obbs,3)).to(self.device)
+        initial_axes = []
+        extents = []
+        initial_offsets = []
+        global_rotations = []
+        global_translations = []
+        obb_link_indices = []
+        for link_idx, box in enumerate(meshes_bounding_boxes):
+            initial_axes.append(torch.eye(3))
+            extents.append(to_torch(copy.deepcopy(box.extents))/2)
+            initial_offsets.append(to_torch(copy.deepcopy(box.transform[:3, 3])))
+            global_rotations.append(torch.tensor([0,0,0,1]))
+            global_translations.append(robot_zero_pose.global_translation[link_idx])
+            obb_link_indices.append(link_idx)
 
-        for joint_idx, box in enumerate(meshes_bounding_boxes):
-            self._initial_axes[joint_idx] = torch.eye(3)
-            self._extents[joint_idx] = to_torch(copy.deepcopy(box.extents))/2
-            self._initial_offsets[joint_idx] = to_torch(copy.deepcopy(box.transform[:3, 3]))
-            self._global_rotations[joint_idx] = torch.tensor([0,0,0,1])
-            self._global_translations[joint_idx] = robot_zero_pose.global_translation[joint_idx]
+        self._initial_axes = torch.stack(initial_axes,dim=0).to(self.device)
+        self._extents = torch.stack(extents,dim=0).to(self.device)
+        self._initial_offsets = torch.stack(initial_offsets,dim=0).to(self.device)
+        self._global_rotations = torch.stack(global_rotations,dim=0).to(self.device)
+        self._global_translations = torch.stack(global_translations,dim=0).to(self.device)
+        self._obb_link_indices = torch.tensor(obb_link_indices,dtype=torch.int32).to(self.device)
+
+        self._collision_mask_mat = self._cal_collision_mask_mat(robot_zero_pose.skeleton_tree.parent_indices)
 
         self._offsets = self._cal_offsets()
         self._axes = self._cal_axes()
@@ -59,6 +76,17 @@ class OBBRobot:
         assert self._axes.shape == (self.num_obbs,3,3)
         assert self._vertices.shape == (self.num_obbs,8,3)
 
+    def _cal_collision_mask_mat(self,parent_indices):
+        mask = torch.ones((self.num_obbs,self.num_obbs),dtype=torch.int32).to(self.device)
+        for link_idx,parent_idx in enumerate(parent_indices):
+            if parent_idx != -1:
+                mask[link_idx][parent_idx] = 0
+                mask[parent_idx][link_idx] = 0
+        for obb_idx in range(self.num_obbs):
+            obb_link_idx = self._obb_link_indices[obb_idx]
+            mask_idx = torch.argwhere(self._obb_link_indices==obb_link_idx)
+            mask[obb_idx,mask_idx] = 0
+        return mask
     @property
     def num_obbs(self):
         return self._num_obbs
@@ -83,6 +111,9 @@ class OBBRobot:
     @property
     def center_pos(self):
         return self.global_translations + self.offsets
+    @property
+    def collision_mask_mat(self):
+        return self._collision_mask_mat.clone()
 
     def _cal_axes(self):
         return quat_rotate(self.global_rotations.unsqueeze(1),self._initial_axes.clone())
@@ -113,13 +144,18 @@ class OBBRobot:
         self._vertices = self._cal_vertices()
 
 class OBBRobotCollisionDetector:
-    def __init__(self,obb_robot:OBBRobot,device='cuda'):
+    def __init__(self,obb_robot:OBBRobot,collision_mask:torch.Tensor=None,device='cuda'):
         self._obb_robot = obb_robot
         self._num_obbs = self._obb_robot.num_obbs
         self.device = device
-        # TODO: the collision of two near links from a robot may not be considered as collision
-        self.collision_mask = torch.eye(self._num_obbs, dtype=torch.bool)
-
+        # the collision of two near links from a robot may not be considered as collision
+        self.collision_mask = obb_robot.collision_mask_mat
+        # filter out the collision of two near links from a robot
+        mask = torch.logical_not(self.check_collision())
+        self.collision_mask *=mask
+        if collision_mask is not None:
+            assert collision_mask.shape == self.collision_mask.shape
+            self.collision_mask *=collision_mask.to(self.device)
     @property
     def num_obbs(self):
         return self._num_obbs
@@ -245,14 +281,14 @@ class OBBRobotCollisionDetector:
         assert torch.allclose(collision_mat, collision_mat.transpose(0,1),atol=1e-6), 'collision_mat is not symmetric'
         assert collision_mat.shape == (self.num_obbs,self.num_obbs)
 
-        mask = torch.logical_not(torch.eye(self.num_obbs)).to(self.device)
+        # mask = torch.logical_not(torch.eye(self.num_obbs)).to(self.device)
 
-        return (collision_mat*mask).to(torch.bool)
+        return (collision_mat*self.collision_mask).to(torch.bool)
 
 
 if __name__ == '__main__':
 
-    obb_robot = OBBRobot(urdf_path='asset/hu/hu_v5.urdf')
+    obb_robot = OBBRobot.from_urdf(urdf_path='asset/hu/hu_v5.urdf')
     obb_detector = OBBRobotCollisionDetector(obb_robot=obb_robot)
 
     import time

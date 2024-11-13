@@ -92,7 +92,7 @@ class VedoOBBRobot(BaseVedoRobot):
         vedo_robot._original_robot_geometries = robot_geometries
         vedo_robot._robot_geometries = copy.deepcopy(vedo_robot._original_robot_geometries)
         return vedo_robot
-    def _generate_robot_geometries(self,use_wireframe=True):
+    def _generate_robot_geometries(self,collision_mat=None,use_wireframe=True):
 
         robot_geometries = []
         for i in range(self.obb_detector.num_obbs):
@@ -102,14 +102,22 @@ class VedoOBBRobot(BaseVedoRobot):
                 self.obb_detector.obb_robot_global_rotation()[i],
                 use_wireframe=use_wireframe
             )
+
             robot_geometries.append(obb_box)
-            robot_geometries.append(Sphere(pos=to_numpy(self.obb_detector.obb_robot_global_translation())[i],r=0.02,c='red'))
-            robot_geometries.append(Sphere(pos=to_numpy(self.obb_detector.obb_robot_center_pos())[i],r=0.02, c='blue'))
+            # robot_geometries.append(Sphere(pos=to_numpy(self.obb_detector.obb_robot_global_translation())[i],r=0.02,c='red'))
+            # robot_geometries.append(Sphere(pos=to_numpy(self.obb_detector.obb_robot_center_pos())[i],r=0.02, c='blue'))
+            # robot_geometries.append(Points(to_numpy(self.obb_detector.obb_robot_vertices()[i]),r=10,c='green'))
+            obb_axes = OBBAxes(self.obb_detector.obb_robot_center_pos()[i], self.obb_detector.obb_robot_axes()[i])
+            if collision_mat is not None and len(torch.argwhere(collision_mat[i])):
+                obb_axes.c("red")
+            robot_geometries.append(obb_axes)
+
         return robot_geometries
 
     def robot_transform(self,global_translations,global_rotations):
         self.obb_detector.update_obbs_transform(global_translations,global_rotations,from_link_transform=True)
-        self._robot_geometries = self._generate_robot_geometries()
+        collision_mat = self.obb_detector.check_collision()
+        self._robot_geometries = self._generate_robot_geometries(collision_mat)
 
     def _update_robot_geometries(self):
         pass
@@ -140,9 +148,16 @@ class OBBBox(Box):
         obb_center = to_numpy(center_pos)
         self.pos(*obb_center)
 
+class OBBAxes(Lines):
+    def __init__(self, center_pos, axes):
+        axes = to_numpy(axes)/10
+        start  = to_numpy(center_pos.unsqueeze(0).repeat(3,1))
+        end = start + axes
+        super().__init__(start, end, lw=3, c='blue')
+
 if __name__ == '__main__':
 
-    obb_robot = OBBRobot(urdf_path='asset/hu/hu_v5.urdf')
+    obb_robot = OBBRobot.from_urdf(urdf_path='asset/hu/hu_v5.urdf')
     obb_detector = OBBRobotCollisionDetector(obb_robot=obb_robot)
 
 
