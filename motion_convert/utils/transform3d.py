@@ -31,7 +31,12 @@ def coord_transform(p,order:list=None,dir=None):
 
 @torch.jit.script
 def cal_joint_quat(standard_pose_local_translation, motion_local_translation):
-    # https://igl.ethz.ch/projects/ARAP/svd_rot.pdf
+    r"""
+    refer to https://igl.ethz.ch/projects/ARAP/svd_rot.pdf
+    :param standard_pose_local_translation:
+    :param motion_local_translation:
+    :return: quat
+    """
     A = torch.einsum('bij,bjk->bik', motion_local_translation.permute(0, 2, 1), standard_pose_local_translation)
     U, _, Vt = torch.linalg.svd(A)
     R_matrix = torch.einsum('bij,bjk->bik', U, Vt)
