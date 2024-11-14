@@ -7,6 +7,7 @@
 """
 import os
 import copy
+from typing import List,Tuple
 from collections import OrderedDict
 import networkx as nx
 import numpy as np
@@ -80,7 +81,7 @@ def parse_urdf(urdf_path):
     # plot_skeleton_H([robot_zero_pose])
     return robot_zero_pose, link_mesh_file_names
 
-def cal_urdf_mesh_bounding_boxes(urdf_path)->List[trimesh.primitives.Box]:
+def cal_urdf_mesh_bounding_boxes(urdf_path)->Tuple[List[trimesh.Trimesh],List[trimesh.primitives.Box]]:
     urdf_robot: URDF = URDF.load(urdf_path)
     links_trimesh = []
     for link in urdf_robot.links:
@@ -95,7 +96,8 @@ def cal_urdf_mesh_bounding_boxes(urdf_path)->List[trimesh.primitives.Box]:
         meshes_bounding_boxes.append(link_trimesh.bounding_box)
     # print(meshes_vertices)
     # print(links_bounding_boxes)
-    return meshes_bounding_boxes
+    return links_trimesh,meshes_bounding_boxes
+
 if __name__ == '__main__':
     # zero_pose, link_mesh_file_names = parse_urdf('asset/hu/hu_v5.urdf')
     cal_urdf_mesh_bounding_boxes('asset/hu/hu_v5.urdf')

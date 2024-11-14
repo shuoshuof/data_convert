@@ -29,26 +29,59 @@ class OBBRobot:
         from motion_convert.utils.parse_urdf import parse_urdf,cal_urdf_mesh_bounding_boxes
 
         robot_zero_pose,_ = parse_urdf(urdf_path)
-        meshes_bounding_boxes = cal_urdf_mesh_bounding_boxes(urdf_path)
-        return robot_zero_pose,meshes_bounding_boxes
+        links_trimesh,meshes_bounding_boxes = cal_urdf_mesh_bounding_boxes(urdf_path)
+        return robot_zero_pose,links_trimesh,meshes_bounding_boxes
 
     @classmethod
     def from_dict(cls,dict:OrderedDict):
         # TODO: complete this
         pass
     @classmethod
-    def from_urdf(cls,urdf_path,device='cuda'):
-        robot_zero_pose, meshes_bounding_boxes = cls.load_robot(urdf_path)
+    def from_urdf(cls,urdf_path,divide=False,device='cuda',):
+        # TODO：remove the dependency of poselib
+        robot_zero_pose, links_trimesh, meshes_bounding_boxes = cls.load_robot(urdf_path)
         obb_robot = cls(device)
-        obb_robot._init_obbs(robot_zero_pose, meshes_bounding_boxes)
+        obb_robot._init_obbs(robot_zero_pose,links_trimesh, meshes_bounding_boxes,divide)
         return obb_robot
 
-    def _init_obbs(self,robot_zero_pose:SkeletonState,meshes_bounding_boxes:List[trimesh.primitives.Box]):
-        self._num_obbs = len(meshes_bounding_boxes)
+    def _init_obbs(self,robot_zero_pose:SkeletonState,links_trimesh:List[trimesh.Trimesh], meshes_bounding_boxes:List[trimesh.primitives.Box],divide):
 
+        if divide:
+            self._cal_divided_obbs(robot_zero_pose,links_trimesh)
+        else:
+            self._cal_simple_obbs(robot_zero_pose,meshes_bounding_boxes)
+        # self._cal_simple_obbs(robot_zero_pose, meshes_bounding_boxes)
+        # self._cal_divided_obbs(robot_zero_pose,links_trimesh)
+
+        self._num_obbs = len(self._obb_link_indices)
+
+        self._collision_mask_mat = self._cal_collision_mask_mat(robot_zero_pose.skeleton_tree.parent_indices)
+
+        self._offsets = self._cal_offsets()
+        self._axes = self._cal_axes()
+        self._vertices = self._cal_vertices()
+
+        assert self._axes.shape == (self.num_obbs,3,3)
+        assert self._vertices.shape == (self.num_obbs,8,3)
+
+    def _cal_collision_mask_mat(self,parent_indices):
+        mask = torch.ones((self.num_obbs,self.num_obbs),dtype=torch.int32).to(self.device)
+        for link_idx,parent_idx in enumerate(parent_indices):
+            if parent_idx != -1:
+                mask[link_idx][parent_idx] = 0
+                mask[parent_idx][link_idx] = 0
+        # the collision of obbs which have the same link index should not be considered
+        for obb_idx in range(self.num_obbs):
+            obb_link_idx = self._obb_link_indices[obb_idx]
+            mask_idx = torch.argwhere(self._obb_link_indices==obb_link_idx)
+            mask[obb_idx,mask_idx] = 0
+        return mask
+    def _cal_simple_obbs(self,robot_zero_pose,meshes_bounding_boxes):
         initial_axes = []
         extents = []
         initial_offsets = []
+        # TODO: add rotation offsets
+        initial_rotations_offsets = []
         global_rotations = []
         global_translations = []
         obb_link_indices = []
@@ -67,26 +100,103 @@ class OBBRobot:
         self._global_translations = torch.stack(global_translations,dim=0).to(self.device)
         self._obb_link_indices = torch.tensor(obb_link_indices,dtype=torch.int32).to(self.device)
 
-        self._collision_mask_mat = self._cal_collision_mask_mat(robot_zero_pose.skeleton_tree.parent_indices)
+    def _cal_divided_obbs(self,robot_zero_pose,links_trimesh:List[trimesh.Trimesh]):
+        initial_axes = []
+        extents = []
+        initial_offsets = []
+        # TODO: add rotation offsets
+        initial_rotations_offsets = []
+        global_rotations = []
+        global_translations = []
+        obb_link_indices = []
 
-        self._offsets = self._cal_offsets()
-        self._axes = self._cal_axes()
-        self._vertices = self._cal_vertices()
+        start = time.time()
+        resolution = 0.01
+        for link_idx, mesh in enumerate(links_trimesh):
+            mesh_bbox = mesh.bounding_box
+            vertices = to_torch(mesh.vertices).to(self.device)
+            min_bounds,max_bounds = to_torch(copy.deepcopy(mesh.bounds)).to(self.device)
+            x_bounds = torch.linspace(min_bounds[0],max_bounds[0],int((max_bounds[0]-min_bounds[0])/resolution))
+            y_bounds = torch.linspace(min_bounds[1],max_bounds[1],int((max_bounds[1]-min_bounds[1])/resolution))
+            z_bounds = torch.linspace(min_bounds[2],max_bounds[2],int((max_bounds[2]-min_bounds[2])/resolution))
 
-        assert self._axes.shape == (self.num_obbs,3,3)
-        assert self._vertices.shape == (self.num_obbs,8,3)
+            grid_x, grid_y, grid_z = torch.meshgrid(x_bounds,y_bounds,z_bounds,indexing='ij')
+            # (length,width,height,3)
+            grid = torch.concatenate([grid_x.unsqueeze(-1),grid_y.unsqueeze(-1),grid_z.unsqueeze(-1)],dim=-1).to(self.device)
+            assert grid.shape == (len(x_bounds),len(y_bounds),len(z_bounds),3)
 
-    def _cal_collision_mask_mat(self,parent_indices):
-        mask = torch.ones((self.num_obbs,self.num_obbs),dtype=torch.int32).to(self.device)
-        for link_idx,parent_idx in enumerate(parent_indices):
-            if parent_idx != -1:
-                mask[link_idx][parent_idx] = 0
-                mask[parent_idx][link_idx] = 0
-        for obb_idx in range(self.num_obbs):
-            obb_link_idx = self._obb_link_indices[obb_idx]
-            mask_idx = torch.argwhere(self._obb_link_indices==obb_link_idx)
-            mask[obb_idx,mask_idx] = 0
-        return mask
+            signs = torch.tensor([-1,1],dtype=torch.float32).to(self.device)
+            # (8,3)
+            signs = torch.cartesian_prod(signs,signs,signs)
+            # (length,width,height,8,num_vertices) <-
+            # (length,width,height,num_vertices,3).unsqueeze(-3) (8,3).unsqueeze(1)
+            mask = torch.all((vertices.unsqueeze(0) - grid.unsqueeze(-2)).unsqueeze(-3) * signs.unsqueeze(1) >= 0,dim=-1)
+            assert mask.shape == (len(x_bounds),len(y_bounds),len(z_bounds),8,len(vertices))
+
+            #                    (length,width,height,8,num_vertices,3)
+            # boxes_bounds_max = (vertices.unsqueeze(0)*mask.unsqueeze(-1)).max(dim=-2).values
+            # boxes_bounds_min = (vertices.unsqueeze(0)*mask.unsqueeze(-1)).min(dim=-2).values
+            # TODO: check the mask
+            boxes_bounds_max = vertices.unsqueeze(0).masked_fill(mask.unsqueeze(-1), float('-inf')).max(dim=-2).values
+            boxes_bounds_min = vertices.unsqueeze(0).masked_fill(mask.unsqueeze(-1), float('inf')).min(dim=-2).values
+
+
+            # assert boxes_bounds_max.min()>=0 and boxes_bounds_min.max()<=0
+
+
+
+            # boxes_bounds_max = torch.masked_select(vertices.unsqueeze(0),mask.unsqueeze(-1)).max(dim=-2).values
+            # boxes_bounds_min = torch.masked_select(vertices.unsqueeze(0),mask.unsqueeze(-1)).min(dim=-2).values
+
+            # boxes_bounds_max = (vertices.unsqueeze(0).masked_fill(~mask.unsqueeze(-1), float('-inf'))).max(dim=-2).values
+            # boxes_bounds_min = (vertices.unsqueeze(0).masked_fill(~mask.unsqueeze(-1), float('inf'))).min(dim=-2).values
+            assert boxes_bounds_max.shape==boxes_bounds_min.shape==(len(x_bounds),len(y_bounds),len(z_bounds),8,3)
+
+            volume_each_division = (boxes_bounds_max - boxes_bounds_min).prod(dim=-1)
+            # assert torch.all(volume_each_division>=0)
+
+            volume_each_division = volume_each_division.sum(dim=-1)
+            assert volume_each_division.shape == (len(x_bounds),len(y_bounds),len(z_bounds))
+
+            # assert mesh.volume<= volume_each_division.min()
+            division_idx = torch.argmin(volume_each_division)
+            division_idx = torch.unravel_index(division_idx,volume_each_division.shape)
+
+            # if link_idx==0:
+            #     division_idx = torch.tensor([0],dtype=torch.int32).to(self.device)
+            #     division_idx = torch.unravel_index(division_idx, volume_each_division.shape)
+
+            # (length,width,height,8,num_vertices,3)
+            boxes_bounds_max = boxes_bounds_max[division_idx].reshape(8,3)
+            boxes_bounds_min = boxes_bounds_min[division_idx].reshape(8,3)
+
+            print(f"-----------link: {link_idx}-----------------")
+            for i in range(8):
+                initial_axes.append(torch.eye(3))
+                extents.append((boxes_bounds_max[i]-boxes_bounds_min[i])/2)
+                initial_offsets.append((boxes_bounds_max[i]+boxes_bounds_min[i])/2)
+                global_rotations.append(torch.tensor([0,0,0,1]))
+                global_translations.append(robot_zero_pose.global_translation[link_idx])
+                obb_link_indices.append(link_idx)
+                print(f"offset: {initial_offsets[-1]}")
+                print(f"grid bounds min: {boxes_bounds_min[i]}")
+                print(f"grid bounds max: {boxes_bounds_max[i]}")
+
+
+
+        end = time.time()
+        torch.cuda.empty_cache()
+        print("time cost: ",end-start)
+
+        self._initial_axes = torch.stack(initial_axes,dim=0).to(self.device)
+        self._extents = torch.stack(extents,dim=0).to(self.device)
+        self._initial_offsets = torch.stack(initial_offsets,dim=0).to(self.device)
+        self._global_rotations = torch.stack(global_rotations,dim=0).to(self.device)
+        self._global_translations = torch.stack(global_translations,dim=0).to(self.device)
+        self._obb_link_indices = torch.tensor(obb_link_indices,dtype=torch.int32).to(self.device)
+
+
+
     @property
     def num_obbs(self):
         return self._num_obbs
@@ -130,14 +240,11 @@ class OBBRobot:
 
     def update_transform(self, global_translations=None, global_rotations=None, from_link_transform=False):
         if global_translations is not None:
-            assert global_translations.shape == (self._num_obbs, 3)
-            # if from_link_transform:
-            #     self._global_translations = self.cal_obb_translation_from_link(global_translations,global_rotations)
-            # else:
-            self._global_translations = global_translations.to(self.device)
+            assert global_translations.shape == (self.num_obbs, 3)
+            self._global_translations = global_translations
         if global_rotations is not None:
-            assert global_rotations.shape == (self._num_obbs, 4)
-            self._global_rotations = global_rotations.to(self.device)
+            assert global_rotations.shape == (self.num_obbs, 4)
+            self._global_rotations = global_rotations
         if from_link_transform:
             self._offsets = self._cal_offsets()
         self._axes = self._cal_axes()
@@ -183,12 +290,21 @@ class OBBRobotCollisionDetector:
         return self.obb_robot.axes
     def obb_robot_extents(self)->torch.Tensor:
         return self.obb_robot.extents
-    def update_obbs_transform(self,global_translations,global_rotations,from_link_transform=False):
-        if global_rotations is None:
-            global_rotations = [None] * self.num_obbs
-        if global_translations is None:
-            global_translations = [None] * self.num_obbs
-        self._obb_robot.update_transform(global_translations=global_translations,global_rotations=global_rotations,from_link_transform=from_link_transform)
+    @property
+    def obb_robot_link_indices(self)->torch.Tensor:
+        return copy.deepcopy(self.obb_robot._obb_link_indices)
+    def update_obbs_transform(self, link_global_translations, link_global_rotations, from_link_transform=False):
+        # if link_global_rotations is None:
+        #     link_global_rotations = [None] * self.num_obbs
+        # if link_global_translations is None:
+        #     link_global_translations = [None] * self.num_obbs
+        obb_global_translations=None
+        obb_global_rotations=None
+        if link_global_translations is not None:
+            obb_global_translations = link_global_translations.to(self.device)[self.obb_robot_link_indices]
+        if link_global_rotations is not None:
+            obb_global_rotations = link_global_rotations.to(self.device)[self.obb_robot_link_indices]
+        self._obb_robot.update_transform(global_translations=obb_global_translations, global_rotations=obb_global_rotations, from_link_transform=from_link_transform)
 
     def _cal_obbs_separating_axes_tensor(self):
         r"""
@@ -295,18 +411,30 @@ class OBBRobotCollisionDetector:
 
 if __name__ == '__main__':
 
-    obb_robot = OBBRobot.from_urdf(urdf_path='asset/hu/hu_v5.urdf')
-    obb_detector = OBBRobotCollisionDetector(obb_robot=obb_robot)
+    # obb_robot = OBBRobot.from_urdf(urdf_path='asset/hu/hu_v5.urdf',divide=True)
+    # obb_detector = OBBRobotCollisionDetector(obb_robot=obb_robot)
 
-    import time
-    for i in range(100):
-        start = time.time()
-        obb_detector.update_obbs_transform(
-            global_translations=torch.randn(obb_detector.num_obbs,3),
-            global_rotations=torch.randn(obb_detector.num_obbs, 4),
-        )
-        # print(obb_detector.obb_robot_global_rotation())
-        obb_detector.check_collision()
-        end = time.time()
+    # import time
+    # for i in range(100):
+    #     start = time.time()
+    #     obb_detector.update_obbs_transform(
+    #         global_translations=torch.randn(obb_detector.num_obbs,3),
+    #         global_rotations=torch.randn(obb_detector.num_obbs, 4),
+    #     )
+    #     # print(obb_detector.obb_robot_global_rotation())
+    #     obb_detector.check_collision()
+    #     end = time.time()
+    #
+    #     print(f"cal_obb: {(end - start) }")
 
-        print(f"cal_obb: {(end - start) }")
+    from vedo_visualizer.vedo_robot import VedoOBBRobot
+    from vedo_visualizer.common import vis_sk_motion
+    import pickle
+
+    # vedo_obb_robot = VedoOBBRobot.from_obb_detector(obb_detector,vis_links_indices=[0])
+    # vedo_obb_robot.show()
+    with open('motion_data/test_motion.pkl','rb') as f:
+        motion = pickle.load(f)
+
+    vis_sk_motion([copy.deepcopy(motion)],divide=True)
+    # vis_sk_motion([copy.deepcopy(motion)],divide=True,vis_links_indices=[0])
