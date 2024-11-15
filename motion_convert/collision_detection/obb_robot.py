@@ -214,7 +214,7 @@ class OBBRobot:
     def center_pos(self):
         return self.global_translations + self.offsets
     @property
-    def collision_mask_mat(self):
+    def obbs_collision_mask_mat(self):
         return self._collision_mask_mat.clone()
 
     def _cal_axes(self):
@@ -254,10 +254,10 @@ class OBBRobotCollisionDetector:
         self._num_obbs = self._obb_robot.num_obbs
         self.device = device
         # the collision of two near links from a robot may not be considered as collision
-        self.collision_mask = obb_robot.collision_mask_mat
+        self.collision_mask = obb_robot.obbs_collision_mask_mat
         # filter out the collision of two near links from a robot
         if use_zero_pose_mask:
-            zero_pose_mask = torch.logical_not(self.check_collision())
+            zero_pose_mask = torch.logical_not(self.check_collision(return_obbs_collisions=True))
             self.collision_mask *= zero_pose_mask
         if additional_collision_mask is not None:
             assert additional_collision_mask.shape == self.collision_mask.shape
@@ -362,16 +362,36 @@ class OBBRobotCollisionDetector:
         :param obbs_collision_mat: shape (num_obbs,num_obbs)
         :return: a links collision matrix with shape (num_links,num_links)
         """
+        # # TODO: fix this bug
+        # # (num_obbs,num_links)
+        # row_indices = self.obb_robot_obb_link_indices.unsqueeze(1).expand(-1, self.obb_robot_num_links)
+        # # (num_links,num_obbs)
+        # col_indices = self.obb_robot_obb_link_indices.unsqueeze(0).expand(self.obb_robot_num_links, -1)
+        #
+        # links_collision_mat = torch.zeros((self.obb_robot_num_links, self.obb_robot_num_links),dtype=torch.int64, device=self.device)
+        #
+        # links_collision_mat.scatter_add_(0,row_indices,obbs_collision_mat)
+        # links_collision_mat.scatter_add_(1,col_indices,obbs_collision_mat)
+
+        # links_collision_mat = torch.zeros((self.obb_robot_num_links, self.obb_robot_num_links), dtype=torch.int64,device=self.device)
+        # for r_link_idx in range(self.obb_robot_num_links):
+        #     for w_link_idx in range(self.obb_robot_num_links):
+        #         r_indices = torch.argwhere(self.obb_robot_obb_link_indices==torch.Tensor([r_link_idx]).to(self.device))
+        #         w_indices = torch.argwhere(self.obb_robot_obb_link_indices==torch.Tensor([w_link_idx]).to(self.device))
+        #         links_collision_mat[r_link_idx][w_link_idx] = obbs_collision_mat[r_indices,w_indices].min()
+
+
         row_indices = self.obb_robot_obb_link_indices.unsqueeze(1).expand(-1, self.num_obbs)
-        col_indices = self.obb_robot_obb_link_indices.unsqueeze(0).expand(self.num_obbs, -1)
+        col_indices = self.obb_robot_obb_link_indices.unsqueeze(0).expand(self.obb_robot_num_links, -1)
 
-        links_collision_mat = torch.zeros((self.num_obbs, self.num_obbs),dtype=torch.int64, device=self.device)
+        tmp_links_collision_mat = torch.zeros((self.obb_robot_num_links, self.num_obbs),dtype=torch.int64, device=self.device)
 
-        links_collision_mat.scatter_add_(0,row_indices,obbs_collision_mat)
-        links_collision_mat.scatter_add_(1,col_indices,obbs_collision_mat)
+        tmp_links_collision_mat.scatter_add_(0,row_indices,obbs_collision_mat)
+
+        links_collision_mat = torch.zeros((self.obb_robot_num_links, self.obb_robot_num_links),dtype=torch.int64, device=self.device)
+        links_collision_mat.scatter_add_(1,col_indices,tmp_links_collision_mat)
 
         return links_collision_mat.to(torch.bool)
-
 
     def check_collision(self,return_obbs_collisions:bool=False):
         r"""
