@@ -111,9 +111,12 @@ class OBBRobot:
         obb_link_indices = []
 
         start = time.time()
-        resolution = 0.01
+        resolution = 0.02
         for link_idx, mesh in enumerate(links_trimesh):
+            # some resolutions of mesh are too small, which may cause the boxes can't contain all vertices
+            mesh = mesh.subdivide()
             mesh_bbox = mesh.bounding_box
+            mesh_volume = torch.tensor(mesh.volume).to(self.device)
             vertices = to_torch(mesh.vertices).to(self.device)
             min_bounds,max_bounds = to_torch(copy.deepcopy(mesh.bounds)).to(self.device)
             x_bounds = torch.linspace(min_bounds[0],max_bounds[0],int((max_bounds[0]-min_bounds[0])/resolution))
@@ -136,13 +139,26 @@ class OBBRobot:
             #                    (length,width,height,8,num_vertices,3)
             # boxes_bounds_max = (vertices.unsqueeze(0)*mask.unsqueeze(-1)).max(dim=-2).values
             # boxes_bounds_min = (vertices.unsqueeze(0)*mask.unsqueeze(-1)).min(dim=-2).values
-            # TODO: check the mask
-            boxes_bounds_max = vertices.unsqueeze(0).masked_fill(mask.unsqueeze(-1), float('-inf')).max(dim=-2).values
-            boxes_bounds_min = vertices.unsqueeze(0).masked_fill(mask.unsqueeze(-1), float('inf')).min(dim=-2).values
+
+            # boxes_bounds_max = (vertices.unsqueeze(0).masked_fill(~mask.unsqueeze(-1), float('-inf'))).max(dim=-2).values
+            # boxes_bounds_min = (vertices.unsqueeze(0).masked_fill(~mask.unsqueeze(-1), float('inf'))).min(dim=-2).values
+
+            fill_grid = grid.clone().view(len(x_bounds),len(y_bounds),len(z_bounds),1,1,3)
+
+            bounds = torch.where(mask.unsqueeze(-1),vertices.unsqueeze(0),fill_grid)
+            boxes_bounds_max = bounds.max(dim=-2).values
+            boxes_bounds_min = bounds.min(dim=-2).values
+            # boxes_bounds_max = (vertices.unsqueeze(0).masked_scatter(~mask.unsqueeze(-1), fill_grid)).max(dim=-2).values
+            # boxes_bounds_min = (vertices.unsqueeze(0).masked_scatter(~mask.unsqueeze(-1), fill_grid)).min(dim=-2).values
+
+
+
+
+            # boxes_bounds_max = (vertices.unsqueeze(0).masked_fill(mask.unsqueeze(-1), float('-inf'))).max(dim=-2).values
+            # boxes_bounds_min = (vertices.unsqueeze(0).masked_fill(mask.unsqueeze(-1), float('inf'))).min(dim=-2).values
 
 
             # assert boxes_bounds_max.min()>=0 and boxes_bounds_min.max()<=0
-
 
 
             # boxes_bounds_max = torch.masked_select(vertices.unsqueeze(0),mask.unsqueeze(-1)).max(dim=-2).values
@@ -153,13 +169,13 @@ class OBBRobot:
             assert boxes_bounds_max.shape==boxes_bounds_min.shape==(len(x_bounds),len(y_bounds),len(z_bounds),8,3)
 
             volume_each_division = (boxes_bounds_max - boxes_bounds_min).prod(dim=-1)
-            # assert torch.all(volume_each_division>=0)
+            assert torch.all(volume_each_division>=0)
 
             volume_each_division = volume_each_division.sum(dim=-1)
             assert volume_each_division.shape == (len(x_bounds),len(y_bounds),len(z_bounds))
 
-            # assert mesh.volume<= volume_each_division.min()
-            division_idx = torch.argmin(volume_each_division)
+            assert mesh.volume<= volume_each_division.min()
+            division_idx = torch.argmin((volume_each_division-mesh_volume).abs())
             division_idx = torch.unravel_index(division_idx,volume_each_division.shape)
 
             # if link_idx==0:
@@ -167,8 +183,8 @@ class OBBRobot:
             #     division_idx = torch.unravel_index(division_idx, volume_each_division.shape)
 
             # (length,width,height,8,num_vertices,3)
-            boxes_bounds_max = boxes_bounds_max[division_idx].reshape(8,3)
-            boxes_bounds_min = boxes_bounds_min[division_idx].reshape(8,3)
+            boxes_bounds_max = boxes_bounds_max[division_idx].view(8,3)
+            boxes_bounds_min = boxes_bounds_min[division_idx].view(8,3)
 
             print(f"-----------link: {link_idx}-----------------")
             for i in range(8):
@@ -413,13 +429,13 @@ if __name__ == '__main__':
 
     # obb_robot = OBBRobot.from_urdf(urdf_path='asset/hu/hu_v5.urdf',divide=True)
     # obb_detector = OBBRobotCollisionDetector(obb_robot=obb_robot)
-
+    #
     # import time
-    # for i in range(100):
+    # for i in range(10000):
     #     start = time.time()
     #     obb_detector.update_obbs_transform(
-    #         global_translations=torch.randn(obb_detector.num_obbs,3),
-    #         global_rotations=torch.randn(obb_detector.num_obbs, 4),
+    #         link_global_translations=torch.randn(obb_detector.num_obbs,3),
+    #         link_global_rotations=torch.randn(obb_detector.num_obbs, 4),
     #     )
     #     # print(obb_detector.obb_robot_global_rotation())
     #     obb_detector.check_collision()
@@ -433,8 +449,8 @@ if __name__ == '__main__':
 
     # vedo_obb_robot = VedoOBBRobot.from_obb_detector(obb_detector,vis_links_indices=[0])
     # vedo_obb_robot.show()
-    with open('motion_data/test_motion.pkl','rb') as f:
+    with open('motion_data/11_7_walk/hu_motion/walk_small_step1_11_07_22_mirror_motion.pkl','rb') as f:
         motion = pickle.load(f)
 
-    vis_sk_motion([copy.deepcopy(motion)],divide=True)
-    # vis_sk_motion([copy.deepcopy(motion)],divide=True,vis_links_indices=[0])
+    # vis_sk_motion([copy.deepcopy(motion)],divide=False)
+    vis_sk_motion([copy.deepcopy(motion)],divide=True,vis_links_indices=[14])
