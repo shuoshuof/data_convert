@@ -65,10 +65,14 @@ class OBBRobot:
     def _cal_collision_mask_mat(self,parent_indices):
         mask = torch.ones((self.num_obbs,self.num_obbs),dtype=torch.int32).to(self.device)
         # filter out the collision between the parent link and child link
-        for link_idx,parent_idx in enumerate(parent_indices):
-            if parent_idx != -1:
-                mask[link_idx][parent_idx] = 0
-                mask[parent_idx][link_idx] = 0
+
+        for obb_idx in range(self.num_obbs):
+            obb_link_idx = self._obb_link_indices[obb_idx]
+            obb_link_parent_idx = parent_indices[obb_link_idx]
+            if obb_link_parent_idx != -1:
+                mask[obb_idx,torch.argwhere(self._obb_link_indices==obb_link_parent_idx)] = 0
+                mask[torch.argwhere(self._obb_link_indices==obb_link_parent_idx),obb_idx] = 0
+
         # the collision of obbs which have the same link index should not be considered
         for obb_idx in range(self.num_obbs):
             obb_link_idx = self._obb_link_indices[obb_idx]
@@ -246,7 +250,7 @@ class OBBRobotCollisionDetector:
     def __init__(
             self,
             obb_robot:OBBRobot,
-            additional_collision_mask:torch.Tensor=None,
+            link_collision_mask:torch.Tensor=None,
             use_zero_pose_mask=True,
             device='cuda'
     ):
@@ -259,9 +263,11 @@ class OBBRobotCollisionDetector:
         if use_zero_pose_mask:
             zero_pose_mask = torch.logical_not(self.check_collision(return_obbs_collisions=True))
             self.collision_mask *= zero_pose_mask
-        if additional_collision_mask is not None:
-            assert additional_collision_mask.shape == self.collision_mask.shape
-            self.collision_mask *=additional_collision_mask.to(self.device)
+        if link_collision_mask is not None:
+            assert link_collision_mask.shape == (self.obb_robot_num_links,self.obb_robot_num_links)
+            self.link_collision_mask = link_collision_mask.to(self.device)
+        else:
+            self.link_collision_mask = torch.ones((self.obb_robot_num_links,self.obb_robot_num_links)).bool().to(self.device)
     @property
     def num_obbs(self):
         return self._num_obbs
@@ -380,7 +386,6 @@ class OBBRobotCollisionDetector:
         #         w_indices = torch.argwhere(self.obb_robot_obb_link_indices==torch.Tensor([w_link_idx]).to(self.device))
         #         links_collision_mat[r_link_idx][w_link_idx] = obbs_collision_mat[r_indices,w_indices].min()
 
-
         row_indices = self.obb_robot_obb_link_indices.unsqueeze(1).expand(-1, self.num_obbs)
         col_indices = self.obb_robot_obb_link_indices.unsqueeze(0).expand(self.obb_robot_num_links, -1)
 
@@ -391,7 +396,7 @@ class OBBRobotCollisionDetector:
         links_collision_mat = torch.zeros((self.obb_robot_num_links, self.obb_robot_num_links),dtype=torch.int64, device=self.device)
         links_collision_mat.scatter_add_(1,col_indices,tmp_links_collision_mat)
 
-        return links_collision_mat.to(torch.bool)
+        return (links_collision_mat*self.link_collision_mask).to(torch.bool)
 
     def check_collision(self,return_obbs_collisions:bool=False):
         r"""
