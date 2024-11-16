@@ -26,8 +26,9 @@ class JointVisualizer(RobotVisualizer):
         self.zero_pose = zero_pose
         self.link_local_rotations = zero_pose.local_rotation.clone()
         # self.link_global_translations = zero_pose.global_translation.clone()
-
-        self.plotter.add_slider(self.slider1,xmin=-3.14, xmax=3.14,value=0,pos='bottom-left')
+        self._generate_slider_funcs()
+        self._add_sliders()
+        # self.plotter.add_slider(self.slider1,xmin=-3.14, xmax=3.14,value=0,pos='bottom-left',title='1')
 
         self.pause_button = self.plotter.at(num_subplots-1).add_button(
             self._stop_button_func,
@@ -47,11 +48,33 @@ class JointVisualizer(RobotVisualizer):
         # assert len(self.data) == self.num_subplots
         self._add_robot()
 
+    def _add_sliders(self):
+        for i in range(self.zero_pose.skeleton_tree.num_joints-1):
+            x1, x2 = 0.1,0.2
+            y1, y2 = (i+1)*0.05,(i+1)*0.05
+            self.plotter.add_slider(
+                getattr(self,f'slider{i+1}'),
+                xmin=-3.14,
+                xmax=3.14,
+                value=0,
+                title=str(i+1),
+                pos=[(x1,y1),(x2,y2)]
+            )
 
-
-    def slider1(self,widget,event):
-        angle = widget.value
-        self.link_local_rotations[13] = quat_from_angle_axis(torch.tensor([angle]),torch.tensor([1,0,0.]))
+    def _generate_slider_funcs(self):
+        Hu_DOF_AXIS = [
+            2, 0, 1, 1, 1,
+            2, 0, 1, 1, 1,
+            2,
+            1, 0, 2, 1, 0, 1, 2, 1, 1,
+            1, 0, 2, 1, 0, 1, 2, 1, 1,
+            2, ]
+        hu_dof_axis = torch.eye(3)[Hu_DOF_AXIS]
+        for i in range(len(hu_dof_axis)):
+            def slider(widget, event,joint_idx=i):
+                angle = widget.value
+                self.link_local_rotations[joint_idx+1] = quat_from_angle_axis(torch.tensor([angle]), hu_dof_axis[joint_idx])
+            setattr(self,f'slider{i+1}',slider)
 
     def update_robots(self):
         # print(self.counter)
