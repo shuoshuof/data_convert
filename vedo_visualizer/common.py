@@ -5,6 +5,7 @@
 @File ：common.py
 @Project ：data_convert
 """
+import os.path
 import pickle
 from typing import List, Union
 import torch
@@ -113,19 +114,53 @@ def vis_sk_motion(motions:List[Union[SkeletonMotion,SkeletonState]]):
     vis = SkMotionVisualizer(len(motions),robots,new_motions)
     vis.show()
 
+def vis_motion_data_dict(path):
+    import joblib
+    from motion_convert.utils.torch_ext import to_torch
+    key = os.path.basename(path).split('.')[0]
+    with open(path,'rb') as f:
+        motion_dict = joblib.load(f)
+    motion_data = motion_dict[key]
+    # v2tov5_indices = [0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+    #                   29, 30, 31, 32]
+    global_rotations = to_torch(motion_data['pose_quat_global'])
+    root_translations = to_torch(motion_data['root_trans_offset'])
+
+    with open('asset/zero_pose/hu_zero_pose.pkl', 'rb') as f:
+        zero_pose:SkeletonState = pickle.load(f)
+
+    state = SkeletonState.from_rotation_and_root_translation(
+        zero_pose.skeleton_tree,
+        global_rotations,
+        root_translations,
+        False
+    )
+
+    motion = SkeletonMotion.from_skeleton_state(state,fps=motion_data['fps'])
+
+    vedo_hu_robot = VedoRobot.from_urdf(urdf_path='asset/hu/hu_v5.urdf')
+
+    robots = [vedo_hu_robot]
+
+    new_motions = [hu_v2_to_hu_v5(motion)]
+
+    vis = SkMotionVisualizer(len(new_motions),robots,new_motions)
+    vis.show()
+
 
 if __name__ == '__main__':
     import copy
     # with open('motion_data/11_7_walk/hu_motion/walk_small_step1_11_07_22_mirror_motion.pkl','rb') as f:
     #     motion = pickle.load(f)
-
-    with open('motion_data/11_17/hu_motion/stand_up_11_17_16_mirror_motion.pkl','rb') as f:
-        motion = pickle.load(f)
-
-    vis_sk_motion([motion])
+    #
+    # with open('motion_data/11_17/hu_motion/stand_up_2_11_17_18_mirror_motion.pkl','rb') as f:
+    #     motion = pickle.load(f)
+    #
+    # vis_sk_motion([motion])
     # vis_robot_collision([copy.deepcopy(motion)],divide=False)
     # vis_sk_motion([copy.deepcopy(motion)],divide=True,vis_links_indices=[16,18])
     # vis_sk_motion([copy.deepcopy(motion)],divide=True)
     # vis_robot_collision([copy.deepcopy(motion)],divide=True)
 
+    vis_motion_data_dict('motion_data/t9/walk_small_step3_with_head_mirror.pkl')
 
