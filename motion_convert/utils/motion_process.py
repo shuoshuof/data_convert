@@ -113,7 +113,7 @@ def fix_joints(motion:SkeletonMotion, joint_indices:list):
     return SkeletonMotion.from_skeleton_state(new_state, motion.fps)
 
 
-def add_zero_pose_head(motion: SkeletonMotion, slerp_frame: int = 60, head_frame:int=30):
+def add_zero_pose_head(motion: SkeletonMotion, slerp_frame: int = 30, head_frame:int=30):
     # hu_start_pose = SkeletonState.zero_pose(skeleton_tree=motion.skeleton_tree)
     with open('asset/start_pose/hu_start_pose.pkl','rb') as f:
         hu_start_pose:SkeletonState = pickle.load(f)
@@ -310,7 +310,10 @@ def motion_concatenate(motions:List[Union[SkeletonMotion,SkeletonState]]):
         torch.cat(motions_root_translation,dim=0),
         is_local=True
     )
-    return SkeletonMotion.from_skeleton_state(new_sk_state,motions[0].fps)
+    if isinstance(motions[0],SkeletonMotion):
+        return SkeletonMotion.from_skeleton_state(new_sk_state,motions[0].fps)
+
+    return SkeletonMotion.from_skeleton_state(new_sk_state,fps=30)
 
 def hu_zero_motion():
     with open('asset/hu_pose/hu_v5_zero_pose.pkl', 'rb') as f:
@@ -385,6 +388,15 @@ class MotionProcessManager:
                 motion.skeleton_tree,
                 filter_data(motion.local_rotation),
                 motion.global_translation[:, 0, :],
+                is_local=True
+            ),
+            fps=motion.fps
+        ),
+        'root_filter': lambda motion: SkeletonMotion.from_skeleton_state(
+            SkeletonState.from_rotation_and_root_translation(
+                motion.skeleton_tree,
+                torch.concatenate([filter_data(motion.local_rotation[:, [0], :],alpha=0.8), motion.local_rotation[:, 1:, :]],dim=1),
+                filter_data(motion.global_translation[:, 0, :],alpha=0.8),
                 is_local=True
             ),
             fps=motion.fps

@@ -185,8 +185,8 @@ def vis_new_hu(motion:SkeletonMotion):
     vis_motion(new_motion,graph='hu',static_frame=False)
 
 if __name__ == '__main__':
-    vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/11_7_walk/mocap',
-                                                     save_dir='motion_data/11_7_walk/hu')
+    vtrdyn_lite_pipeline = ConvertVtrdynLitePipeline(motion_dir='motion_data/11_29/mocap',
+                                                     save_dir='motion_data/11_29/hu')
     args = PipelineArgs(
         max_epoch=500,
         clip_angle=True,
@@ -195,8 +195,10 @@ if __name__ == '__main__':
         adjust_all_axis=False,
         add_zero_pose_head=True,
         filter=True,
+        root_filter=True,
         fix_joints=True,
-        joint_indices=[i for i in range(13,33)] + [1,7],
+        joint_indices=[i for i in range(13,33)]+[1,7],
+        # joint_indices=[18,19,20,21,22,27,28,29,30,31,32],
         flatten_feet=True,
         height_adjustment=False,
         move_to_ground=True,

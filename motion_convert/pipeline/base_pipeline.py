@@ -28,6 +28,8 @@ class PipelineArgs(TypedDict):
 
     filter:NotRequired[bool]
 
+    root_filter:NotRequired[bool]
+
     fix_joints:NotRequired[bool]
     joint_indices:NotRequired[list]
 
