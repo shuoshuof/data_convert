@@ -12,7 +12,7 @@ from poselib.poselib.skeleton.skeleton3d import SkeletonMotion,SkeletonState,Ske
 from poselib.poselib.core.rotation3d import *
 
 from motion_convert.robot_config.Hu import Hu_DOF_LOWER,Hu_DOF_UPPER,Hu_DOF_AXIS
-from motion_convert.utils.transform3d import quat_in_xyz_axis,quat_slerp
+from motion_convert.utils.transform3d import *
 
 def zero_root(motion:SkeletonMotion,adjust_all_axis=False):
     new_motion_root_translation = motion.root_translation.clone()
@@ -292,6 +292,25 @@ def get_mirror_motion(motion:SkeletonMotion):
     )
     return SkeletonMotion.from_skeleton_state(mirror_state,motion.fps)
 
+def adjust_joint_rot(motion:SkeletonMotion):
+    motion_local_rotation = motion.local_rotation.clone()
+    dof_pos  = quat_to_exp_map(motion_local_rotation.clone())
+    dof_pos[:,15,0] += 0.15
+    dof_pos[:,24,0] -= 0.15
+    motion_local_rotation = exp_map_to_quat(dof_pos)
+
+    # motion_local_rotation[:,15,:] = quat_mul_norm(left_angle,motion_local_rotation[:,3,:])
+    # motion_local_rotation[:,24,:] = quat_mul_norm(right_angle,motion_local_rotation[:,22,:])
+
+    new_state = SkeletonState.from_rotation_and_root_translation(
+        motion.skeleton_tree,
+        motion_local_rotation,
+        motion.root_translation,
+        is_local=True
+    )
+
+    return SkeletonMotion.from_skeleton_state(new_state,motion.fps)
+
 def motion_concatenate(motions:List[Union[SkeletonMotion,SkeletonState]]):
     r"""
     all the motions should have the same skeleton tree
@@ -354,6 +373,7 @@ def hu_zero_motion():
 #
 #     return curr_spose_aa.reshape(-1, 72)
 
+
 class WeightedFilter:
     def __init__(self, alpha=0.3):
         self.alpha = alpha
@@ -411,6 +431,7 @@ class MotionProcessManager:
         for key, operation in self.operations.items():
             if kwargs.get(key, False):
                 motion = operation(motion).clone()
+        # motion = adjust_joint_rot(motion)
         motion = clip_dof_pos(motion)
         return motion
 
