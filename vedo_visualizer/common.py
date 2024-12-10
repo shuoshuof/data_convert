@@ -162,5 +162,5 @@ if __name__ == '__main__':
     # vis_sk_motion([copy.deepcopy(motion)],divide=True)
     # vis_robot_collision([copy.deepcopy(motion)],divide=True)
 
-    vis_motion_data_dict('motion_data/t9/walk_small_step3_with_head_mirror.pkl')
+    vis_motion_data_dict('motion_data/12_4_small_walk/hu/walk4_12_04_19.pkl')
 

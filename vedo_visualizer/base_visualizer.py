@@ -9,6 +9,7 @@ from typing import List
 from abc import ABC,abstractmethod
 import math
 import copy
+import time
 
 from vedo import *
 
@@ -61,7 +62,7 @@ class RobotVisualizer(BaseVedoVisualizer):
         self.num_vedo_robot = len(robots)
 
         self.data = data
-        assert len(self.data) == self.num_subplots
+        # assert len(self.data) == self.num_subplots
         self._add_robot()
 
     def _add_robot(self):
@@ -72,18 +73,19 @@ class RobotVisualizer(BaseVedoVisualizer):
     def update_plt(self):
         for i in range(self.num_subplots):
             self.plotter.at(i).clear()
-            # for j in range(self.num_vedo_robot):
-            #     self.plotter.at(i).add(*self.robots_list[i][j].robot_geometries)
-            self.plotter.at(i).add(*self.robots_list[i][0].robot_geometries,*self.robots_list[i][1].robot_geometries)
+            for j in range(self.num_vedo_robot):
+                self.plotter.at(i).add(*self.robots_list[i][j].robot_geometries)
         self.plotter.render()
     @abstractmethod
     def update_robots(self):
         raise NotImplementedError
 
     def loop(self, event):
+        start = time.time()
         self.counter +=1
         self.update_robots()
         self.update_plt()
+        # print(f'fps: {round((1/(time.time()-start)),2)}')
 
 if __name__ == '__main__':
     pass
